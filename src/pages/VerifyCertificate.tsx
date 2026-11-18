@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Search, Loader2 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+
 import { useToast } from "@/hooks/use-toast";
 import CertificatePreview from "@/components/CertificatePreview";
 import { CertificateData } from "@/types/certificate";
@@ -58,11 +58,17 @@ const VerifyCertificate = () => {
     setHasSearched(true);
     
     try {
-      const { data, error } = await supabase
-        .from('certificates')
-        .select('*')
-        .eq('certificate_id', id.trim())
-        .single();
+      const response = await fetch(
+        `/api/verify?id=${encodeURIComponent(id.trim())}`
+      );
+      const result = await response.json();
+      const data = response.ok ? result.certificate : null;
+      const error = response.ok
+        ? null
+        : {
+            code: response.status === 404 ? 'PGRST116' : 'API_ERROR',
+            message: result.error || 'Failed to verify certificate.'
+          };
 
       if (error) {
         if (error.code === 'PGRST116') {
