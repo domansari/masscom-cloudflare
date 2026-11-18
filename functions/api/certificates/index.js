@@ -45,6 +45,25 @@ export async function onRequestPost({ request, env }) {
     if (!data || typeof data !== "object" || Array.isArray(data))
       return Response.json({ error: "Invalid certificate" }, { status: 400 });
 
+
+    // Accept Indian DD/MM/YYYY dates and convert to ISO format.
+    const normalizeDate = (value) => {
+      if (typeof value !== "string") return value;
+      const text = value.trim();
+
+      let match = text.match(/^(\\d{1,2})[/-](\\d{1,2})[/-](\\d{4})$/);
+      if (match) {
+        const [, day, month, year] = match;
+        return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+      }
+
+      return text;
+    };
+
+    if (typeof data.completion_date === "string") {
+      data.completion_date = normalizeDate(data.completion_date);
+    }
+
     const fields = [
       "certificate_id", "student_name", "father_name",
       "course_name", "duration", "completion_date", "grade",
