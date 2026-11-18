@@ -108,34 +108,28 @@ const GenerateCertificate = () => {
     });
 
     try {
-      // Get current user for created_by field
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        throw new Error("User not authenticated");
-      }
+      const response = await fetch("/api/certificates", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          student_name: formData.studentName,
+          father_name: formData.fatherName,
+          course_name: formData.courseName,
+          duration: formData.duration,
+          completion_date: formData.completionDate,
+          grade: formData.grade,
+          student_coordinator: formData.studentCoordinator,
+          roll_no: formData.rollNo,
+          certificate_id: certificateId,
+          batch_number: batchNumber,
+          qr_code_data: qrCodeData
+        })
+      });
 
-      const { data, error } = await supabase
-        .from('certificates')
-        .insert([
-          {
-            student_name: formData.studentName,
-            father_name: formData.fatherName,
-            course_name: formData.courseName,
-            duration: formData.duration,
-            completion_date: formData.completionDate,
-            grade: formData.grade,
-            student_coordinator: formData.studentCoordinator,
-            roll_no: formData.rollNo,
-            certificate_id: certificateId,
-            batch_number: batchNumber,
-            qr_code_data: qrCodeData,
-            created_by: user.id
-          }
-        ]);
-
-      if (error) {
-        throw error;
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || "Failed to create certificate");
       }
 
       // Update form data with generated certificate ID

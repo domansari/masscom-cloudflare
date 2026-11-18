@@ -48,13 +48,13 @@ const CertificateManager = ({ onEditCertificate }: CertificateManagerProps) => {
   const { data: certificates = [], isLoading } = useQuery({
     queryKey: ['certificates'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('certificates')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data || [];
+      const response = await fetch("/api/certificates", {
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+      if (!response.ok) throw new Error("Unable to load certificates");
+      const result = await response.json();
+      return result.data || [];
     }
   });
 
@@ -74,14 +74,14 @@ const CertificateManager = ({ onEditCertificate }: CertificateManagerProps) => {
       console.log('Attempting to delete certificate:', certificateToDelete.id);
       
       // Delete the certificate record
-      const { error: deleteError } = await supabase
-        .from('certificates')
-        .delete()
-        .eq('id', certificateToDelete.id);
+      const response = await fetch(
+        `/api/certificates/${encodeURIComponent(certificateToDelete.id)}`,
+        { method: "DELETE", credentials: "same-origin" }
+      );
 
-      if (deleteError) {
-        console.error('Delete error details:', deleteError);
-        throw deleteError;
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || "Failed to delete certificate");
       }
 
       // Invalidate and refetch the certificates query

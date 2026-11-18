@@ -51,13 +51,13 @@ const ManageCertificates = () => {
   const { data: certificates = [], isLoading } = useQuery({
     queryKey: ['certificates'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('certificates')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data || [];
+      const response = await fetch("/api/certificates", {
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+      if (!response.ok) throw new Error("Failed to load certificates");
+      const result = await response.json();
+      return result.data || [];
     }
   });
 
@@ -71,20 +71,19 @@ const ManageCertificates = () => {
       return;
     }
 
-    if (deletePassword !== "9565526767") {
-      setDeletePasswordError("Incorrect master password");
-      return;
-    }
+
 
     setIsDeleting(true);
     
     try {
-      const { error: deleteError } = await supabase
-        .from('certificates')
-        .delete()
-        .eq('id', certificateToDelete.id);
-
-      if (deleteError) throw deleteError;
+      const response = await fetch(
+        `/api/certificates/${encodeURIComponent(certificateToDelete.id)}`,
+        { method: "DELETE", credentials: "same-origin" }
+      );
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || "Failed to delete certificate");
+      }
 
       await queryClient.invalidateQueries({ queryKey: ['certificates'] });
       
@@ -118,12 +117,19 @@ const ManageCertificates = () => {
     if (!editingCertificate) return;
 
     try {
-      const { error } = await supabase
-        .from('certificates')
-        .update(updatedData)
-        .eq('id', editingCertificate.id);
-
-      if (error) throw error;
+      const response = await fetch(
+        `/api/certificates/${encodeURIComponent(editingCertificate.id)}`,
+        {
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatedData)
+        }
+      );
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || "Failed to update certificate");
+      }
 
       await queryClient.invalidateQueries({ queryKey: ['certificates'] });
       setEditDialogOpen(false);

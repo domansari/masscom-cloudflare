@@ -46,13 +46,13 @@ const PrintCertificates = () => {
   const { data: certificates = [], isLoading } = useQuery({
     queryKey: ['certificates'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('certificates')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data || [];
+      const response = await fetch("/api/certificates", {
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+      if (!response.ok) throw new Error("Failed to load certificates");
+      const result = await response.json();
+      return result.data || [];
     }
   });
 

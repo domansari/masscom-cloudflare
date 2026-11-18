@@ -23,3 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Private student certificate data
+masscom-certificates-d1-import.sql
+
+# Local development and review files
+.wrangler/
+login-code-review.txt

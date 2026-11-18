@@ -1,125 +1,150 @@
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode
+} from "react";
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
-
-interface Profile {
+type AdminUser = {
   id: string;
   email: string;
-  full_name: string | null;
-  role: string;
-  created_at: string;
-  updated_at: string;
-}
+};
 
-interface AuthContextType {
-  user: User | null;
-  session: Session | null;
-  profile: Profile | null;
+type AdminProfile = {
+  role: "admin";
+  full_name: string | null;
+};
+
+type AuthError = { message: string };
+
+type AuthContextType = {
+  user: AdminUser | null;
+  session: { authenticated: true } | null;
+  profile: AdminProfile | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signOut: () => Promise<{ error: any }>;
+  signIn: (
+    email: string,
+    password: string
+  ) => Promise<{ error: AuthError | null }>;
+  signOut: () => Promise<{ error: AuthError | null }>;
   isAdmin: () => boolean;
-}
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => {
+export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+  if (!context) {
+    throw new Error("useAuth must be used within AuthProvider");
   }
   return context;
-};
+}
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+  async function refreshSession() {
+    const response = await fetch("/api/auth/me", {
+      credentials: "same-origin",
+      cache: "no-store"
+    });
 
-      if (error) {
-        console.error('Error fetching profile:', error);
-        return;
-      }
-
-      setProfile(data);
-    } catch (error) {
-      console.error('Error fetching profile:', error);
+    if (!response.ok) {
+      throw new Error("Session check failed");
     }
-  };
+
+    const data = await response.json();
+
+    if (data.authenticated === true) {
+      setUser({
+        id: "admin",
+        email: "Administrator"
+      });
+      return true;
+    }
+
+    setUser(null);
+    return false;
+  }
 
   useEffect(() => {
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('Auth state changed:', event, session);
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          setTimeout(() => {
-            fetchProfile(session.user.id);
-          }, 0);
-        } else {
-          setProfile(null);
-        }
-        
-        setLoading(false);
-      }
-    );
-
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        setTimeout(() => {
-          fetchProfile(session.user.id);
-        }, 0);
-      }
-      
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    refreshSession()
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
-  };
+  async function signIn(email: string, password: string) {
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ email, password })
+      });
 
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    return { error };
-  };
+      if (!response.ok) {
+        return {
+          error: {
+            message:
+              response.status === 429
+                ? "Too many attempts. Try again later."
+                : "Invalid email or password"
+          }
+        };
+      }
 
-  const isAdmin = () => {
-    return profile?.role === 'admin';
-  };
+      const authenticated = await refreshSession();
 
-  const value = {
-    user,
-    session,
-    profile,
-    loading,
-    signIn,
-    signOut,
-    isAdmin,
-  };
+      if (!authenticated) {
+        return { error: { message: "Unable to confirm login session" } };
+      }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+      setUser({ id: "admin", email });
+      return { error: null };
+    } catch {
+      return { error: { message: "Unable to connect to login service" } };
+    }
+  }
+
+  async function signOut() {
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin"
+      });
+
+      if (!response.ok) {
+        return { error: { message: "Unable to sign out" } };
+      }
+
+      setUser(null);
+      return { error: null };
+    } catch {
+      return { error: { message: "Unable to sign out" } };
+    }
+  }
+
+  const profile: AdminProfile | null = user
+    ? { role: "admin", full_name: null }
+    : null;
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        session: user ? { authenticated: true } : null,
+        profile,
+        loading,
+        signIn,
+        signOut,
+        isAdmin: () => Boolean(user)
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}

@@ -36,14 +36,13 @@ const PrintCertificate = () => {
       if (!id) return;
 
       try {
-        const { data, error } = await supabase
-          .from('certificates')
-          .select('*')
-          .eq('id', id)
-          .single();
-
-        if (error) throw error;
-        setCertificate(data);
+        const response = await fetch(
+          `/api/certificates/${encodeURIComponent(id)}`,
+          { credentials: "same-origin", cache: "no-store" }
+        );
+        if (!response.ok) throw new Error("Failed to load certificate");
+        const result = await response.json();
+        setCertificate(result.data);
       } catch (error: any) {
         toast({
           title: "Error",

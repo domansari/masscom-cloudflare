@@ -1,301 +1,91 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate, Link } from "react-router-dom";
-import { useToast } from "@/hooks/use-toast";
-import { ArrowDown, Shield, Smartphone } from "lucide-react";
-import { useOTP } from "@/hooks/useOTP";
-import OTPInput from "@/components/OTPInput";
+import {
+  Card, CardContent, CardDescription, CardHeader, CardTitle
+} from "@/components/ui/card";
 
-const Auth = () => {
+export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [authMode, setAuthMode] = useState<'email' | 'otp'>('email');
-  const [otpValue, setOtpValue] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpError, setOtpError] = useState("");
-  
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { sendOTP, verifyOTP, isLoading: otpLoading, timeLeft, canResend } = useOTP();
 
-  const handleEmailSignIn = async (e: React.FormEvent) => {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
 
     try {
       const { error } = await signIn(email, password);
-      
+
       if (error) {
         toast({
-          title: "Sign In Failed",
+          title: "Login failed",
           description: error.message,
-          variant: "destructive",
+          variant: "destructive"
         });
-      } else {
-        toast({
-          title: "Welcome back!",
-          description: "You have been signed in successfully.",
-        });
-        navigate("/");
+        return;
       }
-    } catch (error: any) {
+
+      navigate("/");
+    } catch {
       toast({
-        title: "Sign In Failed",
-        description: error.message,
-        variant: "destructive",
+        title: "Login failed",
+        description: "Please try again.",
+        variant: "destructive"
       });
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSendOTP = async () => {
-    console.log('Attempting to send OTP for login');
-    setOtpError("");
-    const success = await sendOTP('login');
-    if (success) {
-      setOtpSent(true);
-    }
-  };
-
-  const handleVerifyOTP = async () => {
-    console.log('Attempting to verify OTP for login:', otpValue);
-    
-    if (otpValue.length !== 6) {
-      setOtpError("Please enter a complete 6-digit OTP");
-      return;
-    }
-    
-    const isValid = verifyOTP(otpValue);
-    console.log('OTP verification result for login:', isValid);
-    
-    if (isValid) {
-      // For demo purposes, we'll sign in with a default admin account
-      // In production, you'd have a proper OTP verification system
-      try {
-        const { error } = await signIn("admin@masscom.com", "admin123");
-        
-        if (error) {
-          setOtpError("Unable to complete OTP login. Please try again.");
-        } else {
-          toast({
-            title: "OTP Verified!",
-            description: "You have been signed in successfully.",
-          });
-          navigate("/");
-        }
-      } catch (error: any) {
-        setOtpError("OTP verification failed. Please try again.");
-      }
-    } else {
-      setOtpError("Invalid OTP. Please check the code and try again.");
-    }
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative">
-      <div className="absolute inset-0 bg-black/50"></div>
-      
-      <div className="w-full max-w-md relative z-10 space-y-6">
-        <Card className="backdrop-blur-lg bg-white/10 border-white/20 shadow-2xl">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold text-white">Administrator Login</CardTitle>
-            <CardDescription className="text-gray-300">
-              Sign in to your admin account to manage certificates
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4 mb-6">
-              <div className="flex space-x-2">
-                <Button
-                  variant={authMode === 'email' ? 'default' : 'outline'}
-                  onClick={() => {
-                    setAuthMode('email');
-                    setOtpSent(false);
-                    setOtpValue("");
-                    setOtpError("");
-                  }}
-                  className="flex-1"
-                >
-                  Email Login
-                </Button>
-                <Button
-                  variant={authMode === 'otp' ? 'default' : 'outline'}
-                  onClick={() => {
-                    setAuthMode('otp');
-                    setOtpError("");
-                  }}
-                  className="flex-1"
-                >
-                  <Smartphone className="mr-2 h-4 w-4" />
-                  OTP Login
-                </Button>
-              </div>
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <Card className="w-full max-w-md bg-white/10 backdrop-blur-lg border-white/20">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl text-white">
+            Administrator Login
+          </CardTitle>
+          <CardDescription className="text-gray-300">
+            Sign in to manage certificates
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-white">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="username"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
             </div>
-
-            {authMode === 'email' ? (
-              <form onSubmit={handleEmailSignIn} className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-white">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Enter your email"
-                    className="bg-white/10 border-white/20 text-white placeholder:text-gray-400"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-white">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="bg-white/10 border-white/20 text-white placeholder:text-gray-400"
-                    required
-                  />
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Signing in...
-                    </>
-                  ) : (
-                    <>
-                      <ArrowDown className="mr-2 h-4 w-4" />
-                      Sign In
-                    </>
-                  )}
-                </Button>
-              </form>
-            ) : (
-              <div className="space-y-6">
-                {!otpSent ? (
-                  <div className="text-center space-y-4">
-                    <p className="text-white text-sm">
-                      An OTP will be sent to +917007017256
-                    </p>
-                    <Button
-                      onClick={handleSendOTP}
-                      disabled={otpLoading}
-                      className="w-full bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800"
-                    >
-                      {otpLoading ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                          Sending OTP...
-                        </>
-                      ) : (
-                        <>
-                          <Smartphone className="mr-2 h-4 w-4" />
-                          Send OTP
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="text-center">
-                      <Label className="text-white">Enter 6-digit OTP</Label>
-                      <p className="text-sm text-gray-300 mt-1">
-                        Sent to +917007017256
-                      </p>
-                    </div>
-                    
-                    <div className="flex justify-center">
-                      <OTPInput
-                        value={otpValue}
-                        onChange={(value) => {
-                          setOtpValue(value);
-                          setOtpError(""); // Clear error when user starts typing
-                        }}
-                      />
-                    </div>
-
-                    {timeLeft > 0 && (
-                      <p className="text-center text-sm text-gray-300">
-                        Time remaining: {formatTime(timeLeft)}
-                      </p>
-                    )}
-
-                    {otpError && (
-                      <p className="text-center text-sm text-red-400">{otpError}</p>
-                    )}
-
-                    <div className="space-y-2">
-                      <Button
-                        onClick={handleVerifyOTP}
-                        disabled={otpValue.length !== 6}
-                        className="w-full bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800"
-                      >
-                        Verify OTP
-                      </Button>
-                      
-                      {canResend && (
-                        <Button
-                          onClick={handleSendOTP}
-                          variant="outline"
-                          disabled={otpLoading}
-                          className="w-full"
-                        >
-                          {otpLoading ? 'Sending...' : 'Resend OTP'}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="backdrop-blur-lg bg-white/10 border-white/20 shadow-2xl">
-          <CardContent className="pt-6">
-            <div className="text-center space-y-4">
-              <div className="mx-auto w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center shadow-lg">
-                <Shield className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-2">Verify Certificate</h3>
-                <p className="text-sm text-gray-300 mb-4">
-                  Verify the authenticity of any certificate without logging in
-                </p>
-                <Link to="/verify">
-                  <Button className="w-full bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 text-white shadow-lg transition-all duration-300 hover:scale-105">
-                    <Shield className="mr-2 h-4 w-4" />
-                    Verify Now
-                  </Button>
-                </Link>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-white">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+              />
             </div>
-          </CardContent>
-        </Card>
-      </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Signing in..." : "Sign In"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
-};
-
-export default Auth;
+}
