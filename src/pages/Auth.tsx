@@ -22,6 +22,9 @@ export default function Auth() {
   const [setupQr, setSetupQr] = useState("");
   const [setupUri, setSetupUri] = useState("");
   const [setupMode, setSetupMode] = useState(false);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [recoverMode, setRecoverMode] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState("");
 
   const { signIn, signInWithOtp } = useAuth();
   const navigate = useNavigate();
@@ -58,11 +61,53 @@ export default function Auth() {
     setCode("");
   }
 
+  async function startRecovery() {
+    const response = await fetch("/api/auth/totp/recover", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        password,
+        recovery_code: recoveryCode.trim().toUpperCase()
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Unable to recover authenticator");
+    }
+
+    if (typeof data.otpauth_uri !== "string") {
+      throw new Error("Replacement setup unavailable");
+    }
+
+    const image = await QRCode.toDataURL(data.otpauth_uri);
+    setSetupUri(data.otpauth_uri);
+    setSetupQr(image);
+    setSetupMode(true);
+    setRecoverMode(false);
+    setRecoveryCode("");
+    setPassword("");
+    setCode("");
+  }
+
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
 
     try {
+      if (recoverMode) {
+        const result = await signIn(email, password);
+
+        if (result.error) {
+          throw new Error(result.error.message);
+        }
+
+        await startRecovery();
+        return;
+      }
+
       if (setupMode) {
         const response = await fetch("/api/auth/totp/activate", {
           method: "POST",
@@ -82,7 +127,16 @@ export default function Auth() {
           description: "You can now use OTP login."
         });
 
-        navigate("/");
+        if (!Array.isArray(data.recovery_codes) ||
+            data.recovery_codes.length !== 8) {
+          throw new Error("Recovery codes unavailable. Contact administrator.");
+        }
+
+        setRecoveryCodes(data.recovery_codes);
+        setSetupMode(false);
+        setSetupQr("");
+        setSetupUri("");
+        setCode("");
         return;
       }
 
@@ -123,7 +177,37 @@ export default function Auth() {
         </CardHeader>
 
         <CardContent>
-          {!setupMode && (
+          {recoveryCodes.length > 0 ? (
+            <div className="space-y-4 text-white">
+              <h3 className="font-semibold text-center">
+                Save Your Recovery Codes
+              </h3>
+              <p className="text-sm text-gray-200">
+                These codes are displayed only once.
+                Store them somewhere secure, separate from your phone.
+                Do not share them.
+              </p>
+              <div className="grid grid-cols-2 gap-2 font-mono text-sm">
+                {recoveryCodes.map(code => (
+                  <div key={code} className="rounded bg-black/30 p-2 text-center">
+                    {code}
+                  </div>
+                ))}
+              </div>
+              <Button
+                type="button"
+                className="w-full"
+                onClick={() => {
+                  setRecoveryCodes([]);
+                  navigate("/");
+                }}
+              >
+                I Have Saved My Codes
+              </Button>
+            </div>
+          ) : (
+            <>
+          {!setupMode && !recoverMode && (
             <div className="grid grid-cols-2 gap-2 mb-6">
               <Button
                 type="button"
@@ -151,7 +235,56 @@ export default function Auth() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {setupMode ? (
+            {recoverMode ? (
+              <>
+                <p className="text-sm text-gray-200">
+                  Sign in with your existing password and enter one unused
+                  recovery code to register a replacement authenticator.
+                </p>
+
+                <div className="space-y-2">
+                  <Label htmlFor="recoverEmail" className="text-white">
+                    Email
+                  </Label>
+                  <Input
+                    id="recoverEmail"
+                    type="email"
+                    autoComplete="username"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="recoverPassword" className="text-white">
+                    Password
+                  </Label>
+                  <Input
+                    id="recoverPassword"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="recoveryCode" className="text-white">
+                    Unused recovery code
+                  </Label>
+                  <Input
+                    id="recoveryCode"
+                    placeholder="XXXXXXXX-XXXXXXXX"
+                    autoComplete="off"
+                    value={recoveryCode}
+                    onChange={e => setRecoveryCode(e.target.value)}
+                    required
+                  />
+                </div>
+              </>
+            ) : setupMode ? (
               <>
                 <p className="text-white text-sm text-center">
                   Scan this QR code using Google Authenticator,
@@ -254,9 +387,29 @@ export default function Auth() {
                 ? "Please wait..."
                 : setupMode
                   ? "Activate Authenticator"
-                  : "Sign In"}
+                  : recoverMode
+                    ? "Recover Authenticator"
+                    : "Sign In"}
             </Button>
           </form>
+
+          {!setupMode && (
+            <Button
+              type="button"
+              variant="link"
+              className="w-full mt-3 text-white"
+              disabled={loading}
+              onClick={() => {
+                setRecoverMode(!recoverMode);
+                setSetupRequested(false);
+                setRecoveryCode("");
+              }}
+            >
+              {recoverMode
+                ? "Back to Login"
+                : "Recover Google Authenticator"}
+            </Button>
+          )}
 
           {setupMode && (
             <Button
@@ -267,6 +420,8 @@ export default function Auth() {
             >
               Finish later
             </Button>
+          )}
+            </>
           )}
         </CardContent>
       </Card>
