@@ -95,36 +95,52 @@ export async function onRequestPost({ request, env }) {
         return Response.json({ error: "Missing " + field }, { status: 400 });
     }
 
-    // Accept YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY and ISO timestamps.
-    const normalizeDate = (input) => {
-      if (!input) return null;
 
-      let match = input.match(/^(\\d{4})-(\\d{2})-(\\d{2})(?:T.*)?$/);
-      if (match) {
-        const [, year, month, day] = match;
-        return validDate(year, month, day) ? `${year}-${month}-${day}` : null;
+    // Normalize and validate completion date.
+    const dateValue = String(values.completion_date || "").trim();
+
+    let dateMatch = dateValue.match(
+      /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/
+    );
+
+    if (!dateMatch) {
+      const indianDate = dateValue.match(
+        /^([0-9]{1,2})[/-]([0-9]{1,2})[/-]([0-9]{4})$/
+      );
+
+      if (indianDate) {
+        const [, day, month, year] = indianDate;
+        dateMatch = [
+          null,
+          year,
+          month.padStart(2, "0"),
+          day.padStart(2, "0")
+        ];
       }
+    }
 
-      match = input.match(/^(\\d{2})[/-](\\d{2})[/-](\\d{4})$/);
-      if (match) {
-        const [, day, month, year] = match;
-        return validDate(year, month, day) ? `${year}-${month}-${day}` : null;
-      }
+    if (!dateMatch) {
+      return Response.json(
+        { error: "Invalid completion date" },
+        { status: 400 }
+      );
+    }
 
-      return null;
-    };
+    const [, year, month, day] = dateMatch;
+    const parsed = new Date(Date.UTC(+year, +month - 1, +day));
 
-    const validDate = (year, month, day) => {
-      const date = new Date(Date.UTC(+year, +month - 1, +day));
-      return date.getUTCFullYear() === +year &&
-        date.getUTCMonth() === +month - 1 &&
-        date.getUTCDate() === +day;
-    };
+    if (
+      parsed.getUTCFullYear() !== +year ||
+      parsed.getUTCMonth() !== +month - 1 ||
+      parsed.getUTCDate() !== +day
+    ) {
+      return Response.json(
+        { error: "Invalid completion date" },
+        { status: 400 }
+      );
+    }
 
-    values.completion_date = normalizeDate(values.completion_date);
-
-    if (!values.completion_date)
-      return Response.json({ error: "Invalid completion date" }, { status: 400 });
+    values.completion_date = `${year}-${month}-${day}`;
 
     let qr;
     try {
