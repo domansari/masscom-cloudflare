@@ -64,6 +64,12 @@ export async function onRequestPost({ request, env }) {
       data.completion_date = normalizeDate(data.completion_date);
     }
 
+
+    // Support both frontend camelCase and database snake_case.
+    if (!data.completion_date && data.completionDate) {
+      data.completion_date = data.completionDate;
+    }
+
     const fields = [
       "certificate_id", "student_name", "father_name",
       "course_name", "duration", "completion_date", "grade",
