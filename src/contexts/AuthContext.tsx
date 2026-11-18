@@ -27,6 +27,10 @@ type AuthContextType = {
     email: string,
     password: string
   ) => Promise<{ error: AuthError | null }>;
+  signInWithOtp: (
+    email: string,
+    code: string
+  ) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<{ error: AuthError | null }>;
   isAdmin: () => boolean;
 };
@@ -110,6 +114,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+
+  async function signInWithOtp(email: string, code: string) {
+    try {
+      const response = await fetch("/api/auth/totp/login", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code })
+      });
+
+      if (!response.ok) {
+        return {
+          error: {
+            message: response.status === 429
+              ? "Too many attempts. Try again later."
+              : "Invalid or expired authenticator code"
+          }
+        };
+      }
+
+      const authenticated = await refreshSession();
+
+      if (!authenticated) {
+        return { error: { message: "Unable to confirm login session" } };
+      }
+
+      setUser({ id: "admin", email });
+      return { error: null };
+    } catch {
+      return { error: { message: "Unable to connect to login service" } };
+    }
+  }
+
   async function signOut() {
     try {
       const response = await fetch("/api/auth/logout", {
@@ -140,6 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         loading,
         signIn,
+        signInWithOtp,
         signOut,
         isAdmin: () => Boolean(user)
       }}
