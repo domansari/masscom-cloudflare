@@ -38,7 +38,9 @@ export default function Auth() {
   async function startSetup() {
     const response = await fetch("/api/auth/totp/setup", {
       method: "POST",
-      credentials: "same-origin"
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password })
     });
 
     const data = await response.json();
