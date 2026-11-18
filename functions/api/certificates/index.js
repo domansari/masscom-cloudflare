@@ -70,7 +70,35 @@ export async function onRequestPost({ request, env }) {
         return Response.json({ error: "Missing " + field }, { status: 400 });
     }
 
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(values.completion_date))
+    // Accept YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY and ISO timestamps.
+    const normalizeDate = (input) => {
+      if (!input) return null;
+
+      let match = input.match(/^(\\d{4})-(\\d{2})-(\\d{2})(?:T.*)?$/);
+      if (match) {
+        const [, year, month, day] = match;
+        return validDate(year, month, day) ? `${year}-${month}-${day}` : null;
+      }
+
+      match = input.match(/^(\\d{2})[/-](\\d{2})[/-](\\d{4})$/);
+      if (match) {
+        const [, day, month, year] = match;
+        return validDate(year, month, day) ? `${year}-${month}-${day}` : null;
+      }
+
+      return null;
+    };
+
+    const validDate = (year, month, day) => {
+      const date = new Date(Date.UTC(+year, +month - 1, +day));
+      return date.getUTCFullYear() === +year &&
+        date.getUTCMonth() === +month - 1 &&
+        date.getUTCDate() === +day;
+    };
+
+    values.completion_date = normalizeDate(values.completion_date);
+
+    if (!values.completion_date)
       return Response.json({ error: "Invalid completion date" }, { status: 400 });
 
     let qr;
