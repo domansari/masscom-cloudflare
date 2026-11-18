@@ -97,50 +97,33 @@ export async function onRequestPost({ request, env }) {
 
 
     // Normalize and validate completion date.
+
+    // Accept valid YYYY-MM-DD dates from the certificate form.
     const dateValue = String(values.completion_date || "").trim();
-
-    let dateMatch = dateValue.match(
-      /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/
-    );
-
-    if (!dateMatch) {
-      const indianDate = dateValue.match(
-        /^([0-9]{1,2})[/-]([0-9]{1,2})[/-]([0-9]{4})$/
-      );
-
-      if (indianDate) {
-        const [, day, month, year] = indianDate;
-        dateMatch = [
-          null,
-          year,
-          month.padStart(2, "0"),
-          day.padStart(2, "0")
-        ];
-      }
-    }
+    const dateMatch = dateValue.match(/^([0-9]{4})-([0-9]{2})-([0-9]{2})$/);
 
     if (!dateMatch) {
       return Response.json(
-        { error: "Invalid completion date" },
+        { error: "Invalid completion date: " + dateValue },
         { status: 400 }
       );
     }
 
     const [, year, month, day] = dateMatch;
-    const parsed = new Date(Date.UTC(+year, +month - 1, +day));
+    const parsed = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
 
     if (
-      parsed.getUTCFullYear() !== +year ||
-      parsed.getUTCMonth() !== +month - 1 ||
-      parsed.getUTCDate() !== +day
+      parsed.getUTCFullYear() !== Number(year) ||
+      parsed.getUTCMonth() !== Number(month) - 1 ||
+      parsed.getUTCDate() !== Number(day)
     ) {
       return Response.json(
-        { error: "Invalid completion date" },
+        { error: "Invalid completion date: " + dateValue },
         { status: 400 }
       );
     }
 
-    values.completion_date = `${year}-${month}-${day}`;
+    values.completion_date = dateValue;
 
     let qr;
     try {
