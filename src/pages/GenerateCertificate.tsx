@@ -108,6 +108,28 @@ const GenerateCertificate = () => {
     });
 
     try {
+
+      // Convert the form's completion date to YYYY-MM-DD.
+      const normalizeCompletionDate = (value: string) => {
+        const text = String(value || "").trim();
+
+        // ISO date or timestamp
+        let match = text.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:T.*)?$/);
+        if (match) {
+          const [, y, m, d] = match;
+          return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+        }
+
+        // Indian date format: DD/MM/YYYY or DD-MM-YYYY
+        match = text.match(/^(\\d{1,2})[/-](\\d{1,2})[/-](\\d{4})$/);
+        if (match) {
+          const [, d, m, y] = match;
+          return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+        }
+
+        return text;
+      };
+
       const response = await fetch("/api/certificates", {
         method: "POST",
         credentials: "same-origin",
@@ -117,7 +139,7 @@ const GenerateCertificate = () => {
           father_name: formData.fatherName,
           course_name: formData.courseName,
           duration: formData.duration,
-          completion_date: formData.completionDate,
+          completion_date: normalizeCompletionDate(formData.completionDate),
           grade: formData.grade,
           student_coordinator: formData.studentCoordinator,
           roll_no: formData.rollNo,
