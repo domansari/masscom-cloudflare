@@ -126,7 +126,7 @@ export async function onRequestPost({ request, env }) {
 
       env.DB.prepare(
         `INSERT INTO totp_transaction_guard (valid)
-         SELECT 0 WHERE changes() != 1`
+         SELECT CASE WHEN changes() = 1 THEN 1 ELSE 0 END`
       ),
 
       env.DB.prepare(
@@ -138,7 +138,7 @@ export async function onRequestPost({ request, env }) {
 
       env.DB.prepare(
         `INSERT INTO totp_transaction_guard (valid)
-         SELECT 0 WHERE changes() != 1`
+         SELECT CASE WHEN changes() = 1 THEN 1 ELSE 0 END`
       )
     ]);
 
