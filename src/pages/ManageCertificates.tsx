@@ -73,12 +73,16 @@ const ManageCertificates = () => {
 
 
 
+    if (!deletePassword) {
+      setDeletePasswordError("Enter your login password.");
+      return;
+    }
     setIsDeleting(true);
-    
+    setDeletePasswordError("");
     try {
       const response = await fetch(
         `/api/certificates/${encodeURIComponent(certificateToDelete.id)}`,
-        { method: "DELETE", credentials: "same-origin" }
+        { method: "DELETE", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: deletePassword }) }
       );
       if (!response.ok) {
         const result = await response.json().catch(() => ({}));
@@ -98,6 +102,7 @@ const ManageCertificates = () => {
       });
       
     } catch (error: any) {
+      setDeletePasswordError(error.message || "Failed to delete certificate.");
       toast({
         title: "Error",
         description: error.message || "Failed to delete certificate.",
