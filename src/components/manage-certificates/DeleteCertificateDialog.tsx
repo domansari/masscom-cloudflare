@@ -4,6 +4,8 @@ import {
   DialogFooter, DialogHeader, DialogTitle
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface Certificate {
   id: string;
@@ -23,7 +25,8 @@ interface Props {
 }
 
 export const DeleteCertificateDialog: React.FC<Props> = ({
-  isOpen, onClose, certificate, onConfirm, isDeleting
+  isOpen, onClose, certificate, onConfirm, isDeleting,
+  password, setPassword, passwordError, setPasswordError
 }) => (
   <Dialog open={isOpen} onOpenChange={open => {
     if (!open && !isDeleting) onClose();
@@ -37,18 +40,27 @@ export const DeleteCertificateDialog: React.FC<Props> = ({
           This action cannot be undone.
         </DialogDescription>
       </DialogHeader>
-      <DialogFooter>
+      <form onSubmit={event => { event.preventDefault(); if (password && !isDeleting) onConfirm(); }}>
+        <div className="space-y-2 mb-4">
+          <Label htmlFor="delete-certificate-password">Confirm your login password</Label>
+          <Input id="delete-certificate-password" type="password" autoComplete="current-password"
+            value={password} onChange={event => { setPassword(event.target.value); setPasswordError(""); }}
+            placeholder="Enter your login password" disabled={isDeleting} required maxLength={1024} />
+          {passwordError && <p className="text-sm text-destructive" role="alert">{passwordError}</p>}
+        </div>
+        <DialogFooter>
         <Button variant="outline" onClick={onClose} disabled={isDeleting}>
           Cancel
         </Button>
         <Button
           variant="destructive"
-          onClick={onConfirm}
-          disabled={isDeleting || !certificate}
+          type="submit"
+          disabled={isDeleting || !certificate || !password}
         >
           {isDeleting ? "Deleting..." : "Delete Certificate"}
         </Button>
-      </DialogFooter>
+        </DialogFooter>
+      </form>
     </DialogContent>
   </Dialog>
 );
