@@ -36,7 +36,7 @@ type SortOrder = 'asc' | 'desc';
 
 const CertificateManager = ({ onEditCertificate }: CertificateManagerProps) => {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState<SortField>('created_at');
@@ -59,6 +59,7 @@ const CertificateManager = ({ onEditCertificate }: CertificateManagerProps) => {
   });
 
   const confirmDelete = async () => {
+    if (!isAdmin()) return;
     if (!certificateToDelete) {
       toast({
         title: "Missing Information",
@@ -290,7 +291,7 @@ const CertificateManager = ({ onEditCertificate }: CertificateManagerProps) => {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Dialog open={dialogOpen && certificateToDelete?.id === certificate.id} onOpenChange={(open) => {
+                        {isAdmin() && <Dialog open={dialogOpen && certificateToDelete?.id === certificate.id} onOpenChange={(open) => {
                           setDialogOpen(open);
                           if (!open) {
                             setCertificateToDelete(null);
@@ -343,7 +344,7 @@ const CertificateManager = ({ onEditCertificate }: CertificateManagerProps) => {
                               </Button>
                             </DialogFooter>
                           </DialogContent>
-                        </Dialog>
+                        </Dialog>}
                       </div>
                     </TableCell>
                   </TableRow>

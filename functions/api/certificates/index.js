@@ -1,9 +1,9 @@
 
-import { requireAdmin, sameOrigin } from "../_admin.js";
+import { requireCertificateUser, sameOrigin } from "../_admin.js";
 
 export async function onRequestGet({ request, env }) {
   try {
-    const auth = await requireAdmin(request, env);
+    const auth = await requireCertificateUser(request, env);
     if (auth.error) return Response.json({ error: auth.error }, { status: auth.status });
 
     const result = await env.DB.prepare(
@@ -24,7 +24,7 @@ export async function onRequestPost({ request, env }) {
     if (!sameOrigin(request))
       return Response.json({ error: "Forbidden" }, { status: 403 });
 
-    const auth = await requireAdmin(request, env);
+    const auth = await requireCertificateUser(request, env);
     if (auth.error) return Response.json({ error: auth.error }, { status: auth.status });
 
     const size = Number(request.headers.get("Content-Length") || 0);
@@ -142,7 +142,7 @@ export async function onRequestPost({ request, env }) {
     await env.DB.prepare(
       `INSERT INTO certificates (${columns.join(", ")})
        VALUES (${placeholders})`
-    ).bind(id, ...fields.map(field => values[field]), auth.adminId).run();
+    ).bind(id, ...fields.map(field => values[field]), auth.id).run();
 
     return Response.json({ success: true, id }, { status: 201 });
   } catch {

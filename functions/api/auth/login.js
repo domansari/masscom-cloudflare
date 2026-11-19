@@ -1,15 +1,5 @@
-import { verifyPassword } from "./password.js";
-
-const encoder = new TextEncoder();
-
-function hex(bytes) {
-  return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function sha256(value) {
-  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
-  return hex(new Uint8Array(digest));
-}
+import { verifyPassword, verifyVerifierPassword } from "./password.js";
+import { createSession } from "./totp/_utils.js";
 
 export async function onRequestPost({ request, env }) {
   try {
@@ -44,7 +34,7 @@ export async function onRequestPost({ request, env }) {
     }
 
     const admin = await env.DB.prepare(
-      "SELECT id, password_hash FROM admin_users WHERE email = ?"
+      "SELECT id, password_hash, role FROM admin_users WHERE email = ?"
     ).bind(email.trim().toLowerCase()).first();
 
     const clientIp = request.headers.get("CF-Connecting-IP");
@@ -77,7 +67,11 @@ export async function onRequestPost({ request, env }) {
       return Response.json({ error: "Too many attempts. Try again later." }, { status: 429 });
     }
 
-    if (!admin || !(await verifyPassword(password, admin.password_hash))) {
+    const valid = admin?.role === "admin"
+      ? await verifyPassword(password, admin.password_hash)
+      : admin?.role === "verifier" && await verifyVerifierPassword(password, admin.password_hash);
+
+    if (!valid) {
       const windowStart = attempt ? Date.parse(attempt.window_start) : NaN;
       const inWindow = Number.isFinite(windowStart) &&
         now.getTime() - windowStart < 15 * 60 * 1000;
@@ -127,22 +121,7 @@ export async function onRequestPost({ request, env }) {
       "DELETE FROM login_attempts WHERE identifier = ?"
     ).bind(identifier).run();
 
-    const token = hex(crypto.getRandomValues(new Uint8Array(32)));
-    const tokenHash = await sha256(token);
-    const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
-
-    await env.DB.prepare(
-      "INSERT INTO admin_sessions (id, admin_id, expires_at) VALUES (?, ?, ?)"
-    ).bind(tokenHash, admin.id, expiresAt).run();
-
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-        "Set-Cookie": `masscom_session=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=28800`
-      }
-    });
+    return await createSession(env, admin.id, admin.role);
   } catch (error) {
     console.error("Admin login failed:", error);
     return Response.json({ error: "Unable to sign in" }, { status: 500 });

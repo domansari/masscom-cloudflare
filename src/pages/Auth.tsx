@@ -26,7 +26,7 @@ export default function Auth() {
   const [recoverMode, setRecoverMode] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState("");
 
-  const { signIn, signInWithOtp } = useAuth();
+  const { signIn, signInWithOtp, profile } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -104,6 +104,11 @@ export default function Auth() {
           throw new Error(result.error.message);
         }
 
+        if (result.role === "verifier") {
+          navigate("/");
+          return;
+        }
+
         await startRecovery();
         return;
       }
@@ -149,7 +154,7 @@ export default function Auth() {
         return;
       }
 
-      if (method === "password" && setupRequested) {
+      if (method === "password" && "role" in result && result.role === "admin" && setupRequested) {
         await startSetup();
         return;
       }
@@ -169,7 +174,7 @@ export default function Auth() {
       <Card className="w-full max-w-md bg-white/10 backdrop-blur-lg border-white/20">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl text-white">
-            Administrator Login
+            Staff Login
           </CardTitle>
           <CardDescription className="text-gray-300">
             MASSCOM Certificate Management
@@ -349,14 +354,14 @@ export default function Auth() {
                       />
                     </div>
 
-                    <label className="flex items-center gap-2 text-sm text-white">
+                    {profile?.role !== "verifier" && <label className="flex items-center gap-2 text-sm text-white">
                       <input
                         type="checkbox"
                         checked={setupRequested}
                         onChange={e => setSetupRequested(e.target.checked)}
                       />
-                      Set up Google Authenticator after login
-                    </label>
+                      Set up Google Authenticator after admin login
+                    </label>}
                   </>
                 ) : (
                   <div className="space-y-2">
@@ -373,9 +378,8 @@ export default function Auth() {
                       onChange={e => setCode(e.target.value)}
                       required
                     />
-                    <p className="text-xs text-gray-300">
-                      First-time users must activate Google Authenticator
-                      using the Password tab.
+                  <p className="text-xs text-gray-300">
+                      Administrators can activate Google Authenticator using the Password tab.
                     </p>
                   </div>
                 )}
@@ -393,7 +397,7 @@ export default function Auth() {
             </Button>
           </form>
 
-          {!setupMode && (
+          {!setupMode && profile?.role !== "verifier" && (
             <Button
               type="button"
               variant="link"

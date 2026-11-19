@@ -12,6 +12,7 @@ import { CertificateFilters } from "@/components/manage-certificates/Certificate
 import { CertificateTable } from "@/components/manage-certificates/CertificateTable";
 import { DeleteCertificateDialog } from "@/components/manage-certificates/DeleteCertificateDialog";
 import { CertificatePagination } from "@/components/manage-certificates/CertificatePagination";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Certificate {
   id: string;
@@ -34,6 +35,8 @@ type SortOrder = 'asc' | 'desc';
 const RECORDS_PER_PAGE = 20;
 
 const ManageCertificates = () => {
+  const { isAdmin } = useAuth();
+  const canDelete = isAdmin();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
@@ -62,6 +65,7 @@ const ManageCertificates = () => {
   });
 
   const confirmDelete = async () => {
+    if (!canDelete) return;
     if (!certificateToDelete) {
       toast({
         title: "Missing Information",
@@ -319,7 +323,7 @@ const ManageCertificates = () => {
                 <CertificateTable
                   certificates={paginatedCertificates}
                   onEdit={handleEditCertificate}
-                  onDelete={handleDeleteCertificate}
+                  onDelete={canDelete ? handleDeleteCertificate : undefined}
                   sortField={sortField}
                   sortOrder={sortOrder}
                   onSort={handleSort}
@@ -336,7 +340,7 @@ const ManageCertificates = () => {
         </Card>
       </div>
 
-      <DeleteCertificateDialog
+      {canDelete && <DeleteCertificateDialog
         isOpen={dialogOpen}
         onClose={handleCloseDeleteDialog}
         certificate={certificateToDelete}
@@ -346,7 +350,7 @@ const ManageCertificates = () => {
         setPassword={setDeletePassword}
         passwordError={deletePasswordError}
         setPasswordError={setDeletePasswordError}
-      />
+      />}
 
       {/* Edit Certificate Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>

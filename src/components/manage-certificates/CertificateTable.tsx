@@ -26,7 +26,7 @@ type SortOrder = 'asc' | 'desc';
 interface CertificateTableProps {
   certificates: Certificate[];
   onEdit: (certificate: Certificate) => void;
-  onDelete: (certificate: Certificate) => void;
+  onDelete?: (certificate: Certificate) => void;
   sortField: SortField;
   sortOrder: SortOrder;
   onSort: (field: SortField) => void;
@@ -131,13 +131,13 @@ export const CertificateTable: React.FC<CertificateTableProps> = ({
                       <Printer className="h-4 w-4" />
                     </Button>
                   </Link>
-                  <Button
+                  {onDelete && <Button
                     size="sm"
                     onClick={() => onDelete(certificate)}
                     className="bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 text-white shadow-lg transition-all duration-300 hover:scale-105"
                   >
                     <Trash2 className="h-4 w-4" />
-                  </Button>
+                  </Button>}
                 </div>
               </TableCell>
             </TableRow>

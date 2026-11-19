@@ -1,3 +1,5 @@
+import { hashSessionToken } from "../../_admin.js";
+
 const encoder = new TextEncoder();
 
 export function hex(bytes) {
@@ -108,15 +110,16 @@ export function validOrigin(request) {
   return request.headers.get("Origin") === new URL(request.url).origin;
 }
 
-export async function createSession(env, adminId) {
-  const token = hex(crypto.getRandomValues(new Uint8Array(32)));
-  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(token));
-  const hash = hex(new Uint8Array(digest));
+export async function createSession(env, accountId, role = "admin") {
+  const randomToken = hex(crypto.getRandomValues(new Uint8Array(32)));
+  // Hash the prefix as part of the token so legacy code cannot use these sessions.
+  const token = role === "verifier" ? `v1.${randomToken}` : randomToken;
+  const hash = await hashSessionToken(token);
   const expires = new Date(Date.now() + 28800000).toISOString();
 
   await env.DB.prepare(
     "INSERT INTO admin_sessions (id, admin_id, expires_at) VALUES (?, ?, ?)"
-  ).bind(hash, adminId, expires).run();
+  ).bind(hash, accountId, expires).run();
 
   return new Response(JSON.stringify({ success: true }), {
     headers: {

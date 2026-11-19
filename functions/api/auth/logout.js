@@ -1,3 +1,5 @@
+import { hashSessionToken, sameOrigin, sessionToken } from "../_admin.js";
+
 export async function onRequestPost({ request, env }) {
   const headers = {
     "Cache-Control": "no-store",
@@ -5,7 +7,7 @@ export async function onRequestPost({ request, env }) {
   };
 
   try {
-    if (request.headers.get("Origin") !== new URL(request.url).origin) {
+    if (!sameOrigin(request)) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -13,20 +15,10 @@ export async function onRequestPost({ request, env }) {
       return Response.json({ error: "Database unavailable" }, { status: 503 });
     }
 
-    const cookie = request.headers.get("Cookie") || "";
-    const match = cookie.match(/(?:^|;\s*)masscom_session=([a-f0-9]{64})(?:;|$)/);
-
-    if (match) {
-      const digest = await crypto.subtle.digest(
-        "SHA-256",
-        new TextEncoder().encode(match[1])
-      );
-      const hash = Array.from(new Uint8Array(digest))
-        .map(byte => byte.toString(16).padStart(2, "0"))
-        .join("");
-
+    const token = sessionToken(request);
+    if (token) {
       await env.DB.prepare("DELETE FROM admin_sessions WHERE id = ?")
-        .bind(hash).run();
+        .bind(await hashSessionToken(token)).run();
     }
 
     return Response.json({ success: true }, { headers });

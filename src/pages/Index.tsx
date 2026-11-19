@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
-  const { user, profile } = useAuth();
+  const { profile } = useAuth();
   const isAdmin = profile?.role === 'admin';
 
   return (
@@ -25,8 +25,6 @@ const Index = () => {
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-          {isAdmin && (
-            <>
               <Card className="hover:shadow-xl transition-all duration-300 cursor-pointer bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
                 <Link to="/generate">
                   <CardHeader className="text-center">
@@ -54,7 +52,7 @@ const Index = () => {
                     </div>
                     <CardTitle className="text-xl text-white">Manage Certificates</CardTitle>
                     <CardDescription className="text-gray-300">
-                      View, edit, delete, and manage existing certificates with batch operations
+                      {isAdmin ? "View, edit, and delete certificates" : "View and edit certificates"}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -64,8 +62,6 @@ const Index = () => {
                   </CardContent>
                 </Link>
               </Card>
-            </>
-          )}
 
           <Card className="hover:shadow-xl transition-all duration-300 cursor-pointer bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
             <Link to="/verify">
@@ -86,19 +82,6 @@ const Index = () => {
             </Link>
           </Card>
 
-          {!isAdmin && (
-            <Card className="md:col-span-2 lg:col-span-1 bg-white/10 backdrop-blur-lg border-white/20">
-              <CardHeader className="text-center">
-                <div className="mx-auto w-16 h-16 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex items-center justify-center mb-4 shadow-lg">
-                  <FileText className="h-8 w-8 text-white" />
-                </div>
-                <CardTitle className="text-xl text-white">Welcome</CardTitle>
-                <CardDescription className="text-gray-300">
-                  You can verify certificates using the verification tool. Contact your administrator for certificate generation access.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          )}
         </div>
 
         <div className="text-center mt-16">
