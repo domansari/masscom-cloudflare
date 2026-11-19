@@ -40,7 +40,7 @@ const App = () => (
               <Route 
                 path="/generate" 
                 element={
-                  <ProtectedRoute requireAdmin>
+                  <ProtectedRoute>
                     <GenerateCertificate />
                   </ProtectedRoute>
                 } 
@@ -48,7 +48,7 @@ const App = () => (
               <Route 
                 path="/manage" 
                 element={
-                  <ProtectedRoute requireAdmin>
+                  <ProtectedRoute>
                     <ManageCertificates />
                   </ProtectedRoute>
                 } 
@@ -56,7 +56,7 @@ const App = () => (
               <Route 
                 path="/print/:id" 
                 element={
-                  <ProtectedRoute requireAdmin>
+                  <ProtectedRoute>
                     <PrintCertificate />
                   </ProtectedRoute>
                 } 

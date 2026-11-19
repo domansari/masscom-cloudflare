@@ -1,5 +1,5 @@
 
-import { requireAdmin, sameOrigin } from "../_admin.js";
+import { requireAdmin, requireCertificateUser, sameOrigin } from "../_admin.js";
 import { verifyPassword } from "../auth/password.js";
 
 export async function onRequestDelete({ request, env, params }) {
@@ -57,7 +57,7 @@ export async function onRequestDelete({ request, env, params }) {
 
 export async function onRequestGet({ request, env, params }) {
   try {
-    const auth = await requireAdmin(request, env);
+    const auth = await requireCertificateUser(request, env);
     if (auth.error)
       return Response.json({ error: auth.error }, { status: auth.status });
 
@@ -82,7 +82,7 @@ export async function onRequestPatch({ request, env, params }) {
     if (!sameOrigin(request))
       return Response.json({ error: "Forbidden" }, { status: 403 });
 
-    const auth = await requireAdmin(request, env);
+    const auth = await requireCertificateUser(request, env);
     if (auth.error)
       return Response.json({ error: auth.error }, { status: auth.status });
 
@@ -128,7 +128,7 @@ export async function onRequestPatch({ request, env, params }) {
         return Response.json({ error: "Missing " + key }, { status: 400 });
 
       if (key === "completion_date" &&
-          !/^\\d{4}-\\d{2}-\\d{2}$/.test(cleaned || ""))
+          !/^\d{4}-\d{2}-\d{2}$/.test(cleaned || ""))
         return Response.json({ error: "Invalid completion date" }, { status: 400 });
 
       updates.push(key + " = ?");

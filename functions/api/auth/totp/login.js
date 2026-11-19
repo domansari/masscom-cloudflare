@@ -49,7 +49,7 @@ export async function onRequestPost({ request, env }) {
       `SELECT a.id, t.encrypted_secret, t.last_used_step
        FROM admin_users a
        JOIN admin_totp t ON t.admin_id = a.id
-       WHERE a.email = ? AND t.enabled = 1`
+       WHERE a.email = ? AND a.role = 'admin' AND t.enabled = 1`
     ).bind(email).first();
 
     let step = null;

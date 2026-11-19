@@ -6,27 +6,28 @@ import {
   type ReactNode
 } from "react";
 
-type AdminUser = {
+type Account = {
   id: string;
   email: string;
+  role: "admin" | "verifier";
 };
 
-type AdminProfile = {
-  role: "admin";
+type AccountProfile = {
+  role: Account["role"];
   full_name: string | null;
 };
 
 type AuthError = { message: string };
 
 type AuthContextType = {
-  user: AdminUser | null;
+  user: Account | null;
   session: { authenticated: true } | null;
-  profile: AdminProfile | null;
+  profile: AccountProfile | null;
   loading: boolean;
   signIn: (
     email: string,
     password: string
-  ) => Promise<{ error: AuthError | null }>;
+  ) => Promise<{ error: AuthError | null; role?: Account["role"] }>;
   signInWithOtp: (
     email: string,
     code: string
@@ -46,7 +47,7 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AdminUser | null>(null);
+  const [user, setUser] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function refreshSession() {
@@ -61,16 +62,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const data = await response.json();
 
-    if (data.authenticated === true) {
+    if (
+      data.authenticated === true &&
+      (data.role === "admin" || data.role === "verifier") &&
+      typeof data.user?.id === "string" &&
+      typeof data.user?.email === "string"
+    ) {
       setUser({
-        id: "admin",
-        email: "Administrator"
+        id: data.user.id,
+        email: data.user.email,
+        role: data.role
       });
-      return true;
+      return data.role as Account["role"];
     }
 
     setUser(null);
-    return false;
+    return null;
   }
 
   useEffect(() => {
@@ -107,8 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: { message: "Unable to confirm login session" } };
       }
 
-      setUser({ id: "admin", email });
-      return { error: null };
+      return { error: null, role: authenticated };
     } catch {
       return { error: { message: "Unable to connect to login service" } };
     }
@@ -140,8 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: { message: "Unable to confirm login session" } };
       }
 
-      setUser({ id: "admin", email });
-      return { error: null };
+      return { error: null, role: authenticated };
     } catch {
       return { error: { message: "Unable to connect to login service" } };
     }
@@ -165,8 +170,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const profile: AdminProfile | null = user
-    ? { role: "admin", full_name: null }
+  const profile: AccountProfile | null = user
+    ? { role: user.role, full_name: null }
     : null;
 
   return (
@@ -179,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signInWithOtp,
         signOut,
-        isAdmin: () => Boolean(user)
+        isAdmin: () => user?.role === "admin"
       }}
     >
       {children}

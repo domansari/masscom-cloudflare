@@ -1,6 +1,12 @@
 const encoder = new TextEncoder();
 import { scrypt } from "@noble/hashes/scrypt";
-import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
+import { hexToBytes } from "@noble/hashes/utils";
+
+export async function verifyVerifierPassword(password, storedHash) {
+  // Older deployments cannot authenticate verifier credentials.
+  if (!/^verifier-v1:pbkdf2:[a-f0-9]{32}:[a-f0-9]{64}$/.test(storedHash || "")) return false;
+  return verifyPassword(password, storedHash.slice("verifier-v1:".length));
+}
 
 export async function verifyPassword(password, storedHash) {
   try {
