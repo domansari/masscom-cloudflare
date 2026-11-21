@@ -257,14 +257,14 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
   const formContent = (
     <>
         <p>Passing requires at least 33 out of 100 in each terminal.</p>
-        <form className="grid gap-4 sm:grid-cols-2" onSubmit={save}>
+        <form className={`grid gap-4 sm:grid-cols-2 ${!showSaved ? "text-white [&_input]:border-white/30 [&_input]:bg-white/20 [&_input]:text-white [&_input[type=date]]:[color-scheme:dark]" : ""}`} onSubmit={save}>
           <label>Roll No.<Input required maxLength={46} pattern="[^/]+" value={form.roll_no} onChange={e => setForm({ ...form, roll_no: e.target.value, certificate_ref: "" })} /></label>
           <label>Batch Code<Input required maxLength={46} pattern="[^/]+" value={form.batch_code} onChange={e => setForm({ ...form, batch_code: e.target.value, certificate_ref: "" })} /></label>
           <label>Year<Input required inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={form.year} onChange={e => setForm({ ...form, year: e.target.value })} /></label>
           <label>Student name<Input required maxLength={150} value={form.student_name} onChange={e => setForm({ ...form, student_name: e.target.value, certificate_ref: "" })} /></label>
           <p className="sm:col-span-2">Registration No. {form.roll_no || "Roll No."}/{form.batch_code || "Batch Code"}/{form.year || "Year"}</p>
           <label>Link to certificate
-            <select className="block w-full rounded-md border bg-white p-2" value={form.certificate_ref} onChange={e => setForm({ ...form, certificate_ref: e.target.value })}>
+            <select className={`block w-full rounded-md border p-2 ${showSaved ? "bg-white" : "border-white/30 bg-white/20 text-white [&>option]:bg-slate-900"}`} value={form.certificate_ref} onChange={e => setForm({ ...form, certificate_ref: e.target.value })}>
               <option value="">No certificate linked</option>
               {matchingCertificates.map(certificate => <option key={certificate.id} value={certificate.id}>{certificate.certificate_id}</option>)}
             </select>
@@ -275,8 +275,8 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
           ))}
           {preview && <p className="sm:col-span-2">{preview.total}/200 · {preview.percentage}% · {preview.pass ? "Pass" : "Fail"} · Grade {preview.grade}</p>}
           <div className="flex flex-wrap gap-2 sm:col-span-2">
-            <Button type="submit" disabled={busy}>{editing ? "Save changes" : "Create mark sheet"}</Button>
-            {!certificateId && !form.certificate_ref && <Button type="submit" value="certificate" variant="outline" disabled={busy || !preview?.pass || matchingCertificates.length > 0}>Save &amp; Create Certificate</Button>}
+            <Button type="submit" disabled={busy} className={showSaved ? undefined : "bg-blue-600 text-white hover:bg-blue-700"}>{editing ? "Save changes" : "Create mark sheet"}</Button>
+            {!certificateId && !form.certificate_ref && <Button type="submit" value="certificate" variant="outline" className={showSaved ? undefined : "border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"} disabled={busy || !preview?.pass || matchingCertificates.length > 0}>Save &amp; Create Certificate</Button>}
             {editing && <Button type="button" variant="outline" onClick={reset}>Cancel edit</Button>}
           </div>
         </form>
@@ -285,16 +285,29 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
 
   if (!showSaved) {
     return (
-      <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8">
-        <div className="flex flex-wrap gap-4 text-white">
-          <Link className="underline" to="/">Certificate portal</Link>
-          <Link className="underline" to="/marksheets/manage">Manage Mark Sheets</Link>
+      <main className="relative min-h-screen overflow-hidden bg-cover bg-center bg-no-repeat" style={{ backgroundImage: "url('/lovable-uploads/1c1f036d-97eb-4825-9766-e1ddb31b3f55.png')" }}>
+        <div className="absolute inset-0 bg-black/40" />
+        <nav className="relative border-b border-white/20 bg-white/10 shadow-sm backdrop-blur-lg">
+          <div className="mx-auto grid min-h-16 max-w-7xl grid-cols-2 items-center gap-3 px-4 py-2 text-white sm:grid-cols-3 sm:px-6 lg:px-8">
+            <Link className="flex w-fit items-center gap-2 hover:text-gray-200" to="/">
+              <ArrowLeft className="h-5 w-5 shrink-0" aria-hidden="true" />
+              Back To Home
+            </Link>
+            <h1 className="text-right text-xl font-semibold sm:text-center">Create Marksheet</h1>
+          </div>
+        </nav>
+        <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
+            <CardHeader>
+              <CardTitle>Create Marksheet</CardTitle>
+              <CardDescription className="text-gray-200">Enter the student details and both DCA terminal marks.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {formContent}
+              {notice && <p role="status">{notice}</p>}
+            </CardContent>
+          </Card>
         </div>
-        <section className="space-y-4 rounded-lg bg-white p-5">
-          <h1 className="text-2xl font-bold">Create DCA Mark Sheet</h1>
-          {formContent}
-          <p role="status">{notice}</p>
-        </section>
       </main>
     );
   }
