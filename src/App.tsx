@@ -32,7 +32,8 @@ const App = () => (
                   href="https://www.masscom.co.in/"
                   className="inline-flex min-h-11 items-center gap-2 py-2 text-sm font-semibold hover:underline focus-visible:outline focus-visible:outline-2"
                 >
-                  Go to Home <span className="font-normal">www.masscom.co.in</span>
+                  <img src="https://www.masscom.co.in/assets/logo-121x131.png" alt="" width={32} height={35} className="rounded bg-white object-contain" />
+                  <span>Home</span>
                 </a>
               </div>
             </nav>

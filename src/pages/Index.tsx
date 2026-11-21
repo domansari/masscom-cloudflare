@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { FileText, Search, Plus, Settings, Shield, Cpu, Database, Clock } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
 import CertificatePortalIntro from "@/components/CertificatePortalIntro";
 
 const clockFormat = new Intl.DateTimeFormat("en-IN", {
@@ -36,8 +35,6 @@ function DashboardClock() {
 }
 
 const Index = () => {
-  const { profile } = useAuth();
-  const isAdmin = profile?.role === 'admin';
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -77,7 +74,7 @@ const Index = () => {
                     </div>
                     <CardTitle className="text-xl text-white">Manage Certificates</CardTitle>
                     <CardDescription className="text-gray-300">
-                      {isAdmin ? "View, edit, and delete certificates" : "View and edit certificates"}
+                      View Edit and Manage<br />Already Created Certificate's
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
