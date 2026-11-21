@@ -1,3 +1,4 @@
+import { confirmDeletePassword } from "./_delete-password.js";
 import { examCourseCode, validExamMarks } from "./_exam-courses.js";
 import { requireAdmin, requireCertificateUser, sameOrigin } from "./_admin.js";
 
@@ -20,8 +21,10 @@ export async function onRequest({ request, env }) {
       return json({ data: result.results });
     }
     const id = new URL(request.url).searchParams.get("id");
-    if (method !== "POST" && !/^[a-f0-9-]{36}$/.test(id || "")) return json({ error: "Invalid mark sheet ID" }, 400);
+    if (method !== "POST" && (!id || id.length > 128)) return json({ error: "Invalid mark sheet ID" }, 400);
     if (method === "DELETE") {
+      const passwordError = await confirmDeletePassword(request, env, account);
+      if (passwordError) return passwordError;
       const result = await env.DB.prepare("DELETE FROM marksheets WHERE id = ?").bind(id).run();
       return result.meta.changes ? json({ success: true }) : json({ error: "Mark sheet not found" }, 404);
     }

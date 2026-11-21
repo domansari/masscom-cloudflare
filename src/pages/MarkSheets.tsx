@@ -1,3 +1,4 @@
+import { DeleteCertificateDialog } from "@/components/manage-certificates/DeleteCertificateDialog";
 import { examCourseCode, examCourses, examResult, marksheetResult, passingMark } from "../../functions/api/_exam-courses.js";
 import { ArrowLeft, ArrowDown, ArrowUp, ArrowUpDown, Download, Edit, FileBadge, FilePlus, Printer, Search, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -154,6 +155,10 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [sheetToDelete, setSheetToDelete] = useState<Sheet | null>(null);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [notice, setNotice] = useState("");
 
   async function refresh() {
@@ -196,6 +201,28 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
     setForm(emptyForm);
   }
 
+  function closeDelete() {
+    setSheetToDelete(null);
+    setDeletePassword("");
+    setDeleteError("");
+  }
+
+  async function removeSheet() {
+    if (!isAdmin() || !sheetToDelete || !deletePassword || deleting) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await request("DELETE", sheetToDelete.id, { password: deletePassword });
+      setSheets(current => current.filter(sheet => sheet.id !== sheetToDelete.id));
+      closeDelete();
+      setNotice("Mark sheet deleted.");
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Unable to delete the mark sheet.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function change(method: string, id?: string, values?: object, createCertificate = false) {
     setBusy(true);
     try {
@@ -204,9 +231,9 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
         navigate(`/generate?marksheet=${encodeURIComponent(saved.id)}`);
         return;
       }
-      if (method !== "DELETE" || id === editing) reset();
+      reset();
       if (showSaved) await refresh();
-      setNotice(method === "DELETE" ? "Mark sheet deleted." : "Mark sheet saved.");
+      setNotice("Mark sheet saved.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Unable to complete the request.");
     } finally {
@@ -428,9 +455,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
                         </Button> : score.pass && sheet.registration_no.split("/").length === 3 && <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
                           <Link to={`/generate?marksheet=${encodeURIComponent(sheet.id)}`} aria-label="Create Certificate" title="Create Certificate"><FilePlus className="h-4 w-4" /></Link>
                         </Button>}
-                        {isAdmin() && <Button size="sm" disabled={busy} aria-label="Delete Marksheet" title="Delete Marksheet" className={`bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 ${actionStyle}`} onClick={() => {
-                          if (window.confirm(`Delete the mark sheet for ${sheet.registration_no}?`)) void change("DELETE", sheet.id);
-                        }}><Trash2 className="h-4 w-4" /></Button>}
+                        {isAdmin() && <Button size="sm" disabled={busy} aria-label="Delete Marksheet" title="Delete Marksheet" className={`bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 ${actionStyle}`} onClick={() => setSheetToDelete(sheet)}><Trash2 className="h-4 w-4" /></Button>}
                       </div></TableCell>
                     </TableRow>;
                   })}</TableBody>
@@ -441,6 +466,18 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
           </CardContent>
         </Card>
       </div>
+      {isAdmin() && <DeleteCertificateDialog
+        recordType="Marksheet"
+        isOpen={Boolean(sheetToDelete)}
+        certificate={sheetToDelete}
+        onClose={closeDelete}
+        onConfirm={removeSheet}
+        isDeleting={deleting}
+        password={deletePassword}
+        setPassword={setDeletePassword}
+        passwordError={deleteError}
+        setPasswordError={setDeleteError}
+      />}
       <Dialog open={Boolean(editing)} onOpenChange={open => { if (!open && !busy) reset(); }}>
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Marksheet</DialogTitle><DialogDescription>Update the saved marksheet details.</DialogDescription></DialogHeader>

@@ -13,6 +13,7 @@ interface Certificate {
 }
 
 interface Props {
+  recordType?: "Certificate" | "Marksheet";
   isOpen: boolean;
   onClose: () => void;
   certificate: Certificate | null;
@@ -25,7 +26,7 @@ interface Props {
 }
 
 export const DeleteCertificateDialog: React.FC<Props> = ({
-  isOpen, onClose, certificate, onConfirm, isDeleting,
+  recordType = "Certificate", isOpen, onClose, certificate, onConfirm, isDeleting,
   password, setPassword, passwordError, setPasswordError
 }) => (
   <Dialog open={isOpen} onOpenChange={open => {
@@ -33,9 +34,9 @@ export const DeleteCertificateDialog: React.FC<Props> = ({
   }}>
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>Delete Certificate</DialogTitle>
+        <DialogTitle>Delete {recordType}</DialogTitle>
         <DialogDescription>
-          Are you sure you want to delete the certificate for{" "}
+          Are you sure you want to delete the {recordType.toLowerCase()} for{" "}
           {certificate?.student_name || "this student"}?
           This action cannot be undone.
         </DialogDescription>
@@ -49,7 +50,7 @@ export const DeleteCertificateDialog: React.FC<Props> = ({
           {passwordError && <p className="text-sm text-destructive" role="alert">{passwordError}</p>}
         </div>
         <DialogFooter>
-        <Button variant="outline" onClick={onClose} disabled={isDeleting}>
+        <Button type="button" variant="outline" onClick={onClose} disabled={isDeleting}>
           Cancel
         </Button>
         <Button
@@ -57,7 +58,7 @@ export const DeleteCertificateDialog: React.FC<Props> = ({
           type="submit"
           disabled={isDeleting || !certificate || !password}
         >
-          {isDeleting ? "Deleting..." : "Delete Certificate"}
+          {isDeleting ? "Deleting..." : `Delete ${recordType}`}
         </Button>
         </DialogFooter>
       </form>
