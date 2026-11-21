@@ -29,7 +29,19 @@ export async function onRequestGet(context) {
       );
     }
 
-    return Response.json({ certificate });
+    const marksheet = await context.env.DB.prepare(
+      `SELECT m.registration_no, m.student_name, m.father_name, m.first_terminal,
+              m.second_terminal, m.third_terminal,
+              COALESCE(m.publishing_course, m.exam_course) AS exam_course,
+              m.issued_on, c.duration
+       FROM marksheets m
+       JOIN certificates c ON c.id = m.certificate_ref
+       WHERE c.certificate_id = ?`
+    ).bind(certificateId).first();
+
+    return Response.json({ certificate, marksheet: marksheet || null }, {
+      headers: { "Cache-Control": "no-store" }
+    });
   } catch (error) {
     console.error("Certificate verification failed:", error);
     return Response.json(
