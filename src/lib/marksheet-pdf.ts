@@ -146,7 +146,7 @@ export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wo
     pdf.line(start, 687, end, 687);
     pdf.text(label, (start + end) / 2, 703, { align: "center" });
   });
-  if (signature) pdf.addImage(signature, "PNG", 440, 647, 48, 39);
+  if (signature) pdf.addImage(signature, "PNG", 434, 645, 65, 41);
   pdf.line(61, 712, 560, 712);
   font("normal", 8.5);
   pdf.text("Grade: >75% Excellent | >50% to 75% Good | up to 50% Satisfactory (when passed)", 310, 724, { align: "center" });
