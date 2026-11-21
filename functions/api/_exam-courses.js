@@ -15,7 +15,7 @@ export const examCourses = {
     modules: [
       ["first_terminal", "1st Terminal", "Computer Fundamentals, MS-DOS, MS-Windows 7"],
       ["second_terminal", "2nd Terminal", "MS Word, MS Excel, MS Access, MS PowerPoint, Internet"],
-      ["third_terminal", "Module 3", "Basics of Accountancy & Tally.ERP 9 With (GST & PAYROLL)"],
+      ["third_terminal", "3rd Terminal", "Basics of Accountancy & Tally.ERP 9 With (GST & PAYROLL)"],
     ],
   },
 };

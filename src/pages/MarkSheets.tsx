@@ -20,7 +20,7 @@ const sortColumns = [
   ["issued_on", "Issue Date"],
   ["first_terminal", "1st Terminal"],
   ["second_terminal", "2nd Terminal"],
-  ["third_terminal", "Module 3"],
+  ["third_terminal", "3rd Terminal"],
 ] as const;
 type SortField = (typeof sortColumns)[number][0];
 const pageSize = 10;
