@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Search, Loader2, FileText, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { createMarksheetPdf, type PrintableMarksheet } from "@/lib/marksheet-pdf";
+import type { PrintableMarksheet } from "@/lib/marksheet-pdf";
 import MarksheetCanvasPreview from "@/components/MarksheetCanvasPreview";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -38,35 +38,14 @@ const VerifyCertificate = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [marksheet, setMarksheet] = useState<PrintableMarksheet | null>(null);
   const [preview, setPreview] = useState<"certificate" | "marksheet" | null>(null);
-  const [marksheetBytes, setMarksheetBytes] = useState<Uint8Array | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
 
   const closePreview = () => {
     setPreview(null);
-    setMarksheetBytes(null);
   };
 
-  const openMarksheet = async () => {
-    if (!marksheet) return;
-    setPreviewBusy(true);
-    try {
-      const pdf = await createMarksheetPdf(marksheet);
-      // Apply the watermark to the PDF itself, not merely the viewer overlay.
-      const width = pdf.internal.pageSize.getWidth();
-      const height = pdf.internal.pageSize.getHeight();
-      pdf.setTextColor(190, 190, 190);
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(43);
-      pdf.text("ONLINE VERIFICATION", width / 2, height / 2, {
-        align: "center", angle: 35
-      });
-      setMarksheetBytes(new Uint8Array(pdf.output("arraybuffer")));
-      setPreview("marksheet");
-    } catch {
-      toast({ title: "Preview unavailable", description: "Could not prepare the marksheet.", variant: "destructive" });
-    } finally {
-      setPreviewBusy(false);
-    }
+  const openMarksheet = () => {
+    if (marksheet) setPreview("marksheet");
   };
 
   // Auto-extract certificate ID from URL parameters and verify
@@ -303,8 +282,8 @@ const VerifyCertificate = () => {
                           </div>
                         </div>
                       </div>
-                    ) : marksheetBytes ? (
-                      <MarksheetCanvasPreview bytes={marksheetBytes} />
+                    ) : marksheet ? (
+                      <MarksheetCanvasPreview sheet={marksheet} />
                     ) : null}
                   </DialogContent>
                 </Dialog>
