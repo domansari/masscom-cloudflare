@@ -1,0 +1,36 @@
+export const examCourses = {
+  dca: {
+    name: "Diploma in Computer Application",
+    modules: [
+      ["first_terminal", "1st Terminal", "Computer Fundamentals, MS-DOS, MS-Windows 7"],
+      ["second_terminal", "2nd Terminal", "MS Word, MS Excel, MS Access, MS PowerPoint, Internet"],
+    ],
+  },
+  cca: {
+    name: "Certificate Course in Computer Accountancy",
+    modules: [["first_terminal", "Module 1", "Basics of Accountancy & Tally.ERP 9 With (GST & PAYROLL)"]],
+  },
+  adca: {
+    name: "Advance Diploma in Computer Accountancy",
+    modules: [
+      ["first_terminal", "1st Terminal", "Computer Fundamentals, MS-DOS, MS-Windows 7"],
+      ["second_terminal", "2nd Terminal", "MS Word, MS Excel, MS Access, MS PowerPoint, Internet"],
+      ["third_terminal", "Module 3", "Basics of Accountancy & Tally.ERP 9 With (GST & PAYROLL)"],
+    ],
+  },
+};
+
+export const passingMark = 33;
+
+export function examCourseCode(name) {
+  const normalized = String(name ?? "").trim().toLowerCase();
+  if (["dca", "diploma in computer applications"].includes(normalized)) return "dca";
+  if (["cca", "computer accountancy tally & gst"].includes(normalized)) return "cca";
+  return Object.keys(examCourses).find(code => examCourses[code].name.toLowerCase() === normalized);
+}
+
+export function validExamMarks(code, marks, minimum = 0) {
+  return examCourses[code]?.modules.every(([field]) =>
+    Number.isInteger(marks?.[field]) && marks[field] >= minimum && marks[field] <= 100
+  ) ?? false;
+}

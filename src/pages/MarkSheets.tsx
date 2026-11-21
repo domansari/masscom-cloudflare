@@ -1,3 +1,4 @@
+import { examCourseCode, examCourses, passingMark } from "../../functions/api/_exam-courses.js";
 import { ArrowLeft, ArrowDown, ArrowUp, ArrowUpDown, Download, Edit, FileBadge, FilePlus, Printer, Search, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,11 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 
-const terminals = [
-  ["first_terminal", "1st Terminal", "Computer Fundamentals, MS-DOS, MS-Windows 7"],
-  ["second_terminal", "2nd Terminal", "MS Word, MS Excel, MS Access, MS PowerPoint, Internet"],
-] as const;
-type Sheet = { id: string; registration_no: string; student_name: string; issued_on: string; first_terminal: number; second_terminal: number; certificate_ref: string | null };
+type Sheet = { id: string; registration_no: string; student_name: string; issued_on: string; first_terminal: number; second_terminal: number; third_terminal: number | null; exam_course: keyof typeof examCourses; certificate_ref: string | null };
 type Certificate = { id: string; certificate_id: string; student_name: string; roll_no?: string; batch_number?: string; course_name: string };
 const sortColumns = [
   ["student_name", "Student Name"],
@@ -23,23 +20,31 @@ const sortColumns = [
   ["issued_on", "Issue Date"],
   ["first_terminal", "1st Terminal"],
   ["second_terminal", "2nd Terminal"],
+  ["third_terminal", "Module 3"],
 ] as const;
 type SortField = (typeof sortColumns)[number][0];
 const pageSize = 10;
 const actionStyle = "h-8 w-8 shrink-0 p-0 text-white shadow-lg transition-all duration-300 hover:scale-105";
 
-const emptyForm = { roll_no: "", batch_code: "", year: "", certificate_ref: "", student_name: "", issued_on: "", first_terminal: "", second_terminal: "" };
+const emptyForm = { roll_no: "", batch_code: "", year: "", certificate_ref: "", student_name: "", issued_on: "", first_terminal: "", second_terminal: "", third_terminal: "" };
 const normalize = (value?: string) => (value ?? "").trim().toLowerCase();
 
-function result(first: number, second: number) {
-  const total = first + second;
-  const pass = first >= 33 && second >= 33;
-  return { total, percentage: (total / 2).toFixed(2), pass, grade: !pass ? "Fail" : total > 150 ? "Excellent" : total > 100 ? "Good" : "Satisfactory" };
+function result(...marks: number[]) {
+  const total = marks.reduce((sum, mark) => sum + mark, 0);
+  const maximum = marks.length * 100;
+  const percentage = total / marks.length;
+  const pass = marks.every(mark => mark >= passingMark);
+  return { total, maximum, percentage: percentage.toFixed(2), pass,
+    grade: !pass ? "Fail" : percentage > 75 ? "Excellent" : percentage > 50 ? "Good" : "Satisfactory" };
+}
+
+function sheetResult(sheet: Sheet) {
+  return result(...examCourses[sheet.exam_course].modules.map(([field]) => Number(sheet[field])));
 }
 
 function download(sheet: Sheet) {
   const pdf = new jsPDF({ unit: "mm", format: "letter" });
-  const score = result(sheet.first_terminal, sheet.second_terminal);
+  const score = sheetResult(sheet);
   pdf.setLineWidth(0.6);
   pdf.rect(11, 11, 194, 257);
   pdf.setFontSize(17);
@@ -50,15 +55,14 @@ function download(sheet: Sheet) {
   const lines = [
     ...pdf.splitTextToSize(`Registration No.  ${sheet.registration_no}`, 166),
     ...pdf.splitTextToSize(`Student name  ${sheet.student_name}`, 166),
-    "Course  Diploma in Computer Application",
-    "Duration  8 months",
+    `Course  ${examCourses[sheet.exam_course].name}`,
   ];
   pdf.text(lines, 23, 57);
   let y = 62 + lines.length * 5;
   pdf.text("Course / Subject / Module", 23, y);
   pdf.text("Maximum", 148, y);
   pdf.text("Secured", 178, y);
-  for (const [key, label, modules] of terminals) {
+  for (const [key, label, modules] of examCourses[sheet.exam_course].modules) {
     pdf.line(23, y + 3, 193, y + 3);
     y += 12;
     pdf.text(label, 23, y);
@@ -67,19 +71,19 @@ function download(sheet: Sheet) {
     pdf.text(pdf.splitTextToSize(modules, 112), 23, y + 6);
     y += 18;
   }
-  pdf.text(`Total: ${score.total}/200    Percentage: ${score.percentage}%    Grade: ${score.grade}`, 23, y + 7);
-  pdf.text("Passing requirement: at least 33/100 in each terminal.", 23, y + 17);
+  pdf.text(`Total: ${score.total}/${score.maximum}    Percentage: ${score.percentage}%    Grade: ${score.grade}`, 23, y + 7);
+  pdf.text("Passing requirement: at least 33/100 in each required exam.", 23, y + 17);
   pdf.text("Prepared By", 23, 245);
   pdf.text(`Date of Issue: ${sheet.issued_on}`, 79, 245);
   pdf.text("Controller of Examination", 146, 245);
-  pdf.save(`DCA-${sheet.registration_no.replace(/[^a-z0-9_-]/gi, "-")}.pdf`);
+  pdf.save(`${sheet.exam_course.toUpperCase()}-${sheet.registration_no.replace(/[^a-z0-9_-]/gi, "-")}.pdf`);
 }
 
 function printMarkSheet(sheet: Sheet) {
   const printWindow = window.open("", "_blank", "popup,width=850,height=720");
   if (!printWindow) return false;
   const document = printWindow.document;
-  const score = result(sheet.first_terminal, sheet.second_terminal);
+  const score = sheetResult(sheet);
   const appendText = (tag: string, text: string, parent: HTMLElement = document.body) => {
     const element = document.createElement(tag);
     element.textContent = text;
@@ -100,7 +104,7 @@ function printMarkSheet(sheet: Sheet) {
   appendText("h2", "Statement of Marks");
   appendText("p", `Registration No. ${sheet.registration_no}`);
   appendText("p", `Student Name: ${sheet.student_name}`);
-  appendText("p", "Diploma in Computer Application · 8 months");
+  appendText("p", examCourses[sheet.exam_course].name);
 
   const table = document.createElement("table");
   document.body.append(table);
@@ -109,15 +113,15 @@ function printMarkSheet(sheet: Sheet) {
     appendText("th", heading, headings);
   }
   const body = table.createTBody();
-  for (const [key, label, modules] of terminals) {
+  for (const [key, label, modules] of examCourses[sheet.exam_course].modules) {
     const row = body.insertRow();
     appendText("strong", label, row.insertCell());
     appendText("div", modules, row.cells[0]);
     row.insertCell().textContent = "100";
     row.insertCell().textContent = String(sheet[key]);
   }
-  appendText("p", `Total: ${score.total}/200 · Percentage: ${score.percentage}% · Result: ${score.pass ? "Pass" : "Fail"} · Grade: ${score.grade}`);
-  appendText("p", "Passing requirement: at least 33/100 in each terminal.");
+  appendText("p", `Total: ${score.total}/${score.maximum} · Percentage: ${score.percentage}% · Result: ${score.pass ? "Pass" : "Fail"} · Grade: ${score.grade}`);
+  appendText("p", "Passing requirement: at least 33/100 in each required exam.");
   const footer = appendText("footer", "");
   appendText("span", "Prepared By", footer);
   appendText("span", `Date of Issue: ${sheet.issued_on}`, footer);
@@ -158,6 +162,8 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
   const [loading, setLoading] = useState(true);
   const [sheets, setSheets] = useState<Sheet[]>([]);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [editingCourse, setEditingCourse] = useState<keyof typeof examCourses>("dca");
+  const terminals = examCourses[editingCourse].modules;
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -179,8 +185,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
       if (!response.ok) throw new Error("Could not load certificates for linking.");
       const { data } = await response.json() as { data: Certificate[] };
       if (!active) return;
-      const dca = data.filter(certificate => ["dca", "diploma in computer application", "diploma in computer applications"].includes(normalize(certificate.course_name)));
-      setCertificates(dca);
+      setCertificates(data.filter(certificate => examCourseCode(certificate.course_name)));
 
     }).catch((error: Error) => { if (active) setNotice(error.message); });
     return () => { active = false; };
@@ -190,15 +195,17 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
     setNotice("");
     const [roll_no = "", batch_code = "", year = ""] = sheet.registration_no.split("/");
     setEditing(sheet.id);
+    setEditingCourse(sheet.exam_course);
     setForm({
       ...emptyForm, roll_no, batch_code, year, certificate_ref: sheet.certificate_ref ?? "",
       student_name: sheet.student_name, issued_on: sheet.issued_on,
-      first_terminal: String(sheet.first_terminal), second_terminal: String(sheet.second_terminal),
+      first_terminal: String(sheet.first_terminal), second_terminal: String(sheet.second_terminal), third_terminal: String(sheet.third_terminal ?? ""),
     });
   }
 
   function reset() {
     setEditing(undefined);
+    setEditingCourse("dca");
     setForm(emptyForm);
   }
 
@@ -224,13 +231,13 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
     event.preventDefault();
     const createCertificate = (event.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "certificate";
     void change(editing ? "PUT" : "POST", editing, {
-      ...form, first_terminal: Number(form.first_terminal), second_terminal: Number(form.second_terminal),
+      ...form, ...Object.fromEntries(terminals.map(([field]) => [field, Number(form[field])])),
     }, createCertificate);
   }
 
-  const preview = form.first_terminal !== "" && form.second_terminal !== ""
-    ? result(Number(form.first_terminal), Number(form.second_terminal)) : null;
-  const matchingCertificates = certificates.filter(certificate => form.roll_no.trim() && form.batch_code.trim() &&
+  const preview = terminals.every(([field]) => form[field] !== "")
+    ? result(...terminals.map(([field]) => Number(form[field]))) : null;
+  const matchingCertificates = certificates.filter(certificate => examCourseCode(certificate.course_name) === editingCourse && form.roll_no.trim() && form.batch_code.trim() &&
     normalize(certificate.roll_no) === normalize(form.roll_no) &&
     normalize(certificate.batch_number) === normalize(form.batch_code) &&
     normalize(certificate.student_name) === normalize(form.student_name));
@@ -256,7 +263,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
 
   const formContent = (
     <>
-        <p>Passing requires at least 33 out of 100 in each terminal.</p>
+        <p>Passing requires at least 33 out of 100 in each required exam.</p>
         <form className={`grid gap-4 sm:grid-cols-2 ${!showSaved ? "text-white [&_input]:border-white/30 [&_input]:bg-white/20 [&_input]:text-white [&_input[type=date]]:[color-scheme:dark]" : ""}`} onSubmit={save}>
           <label>Roll No.<Input required maxLength={46} pattern="[^/]+" value={form.roll_no} onChange={e => setForm({ ...form, roll_no: e.target.value, certificate_ref: "" })} /></label>
           <label>Batch Code<Input required maxLength={46} pattern="[^/]+" value={form.batch_code} onChange={e => setForm({ ...form, batch_code: e.target.value, certificate_ref: "" })} /></label>
@@ -273,10 +280,10 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
           {terminals.map(([field, label, modules]) => (
             <label key={field}>{label} (out of 100)<Input required type="number" min={0} max={100} step={1} value={form[field]} onChange={e => setForm({ ...form, [field]: e.target.value })} /><small>{modules}</small></label>
           ))}
-          {preview && <p className="sm:col-span-2">{preview.total}/200 · {preview.percentage}% · {preview.pass ? "Pass" : "Fail"} · Grade {preview.grade}</p>}
+          {preview && <p className="sm:col-span-2">{preview.total}/{preview.maximum} · {preview.percentage}% · {preview.pass ? "Pass" : "Fail"} · Grade {preview.grade}</p>}
           <div className="flex flex-wrap gap-2 sm:col-span-2">
             <Button type="submit" disabled={busy} className={showSaved ? undefined : "bg-blue-600 text-white hover:bg-blue-700"}>{editing ? "Save changes" : "Create mark sheet"}</Button>
-            {!certificateId && !form.certificate_ref && <Button type="submit" value="certificate" variant="outline" className={showSaved ? undefined : "border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"} disabled={busy || !preview?.pass || matchingCertificates.length > 0}>Save &amp; Create Certificate</Button>}
+            {editingCourse === "dca" && !certificateId && !form.certificate_ref && <Button type="submit" value="certificate" variant="outline" className={showSaved ? undefined : "border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"} disabled={busy || !preview?.pass || matchingCertificates.length > 0}>Save &amp; Create Certificate</Button>}
             {editing && <Button type="button" variant="outline" onClick={reset}>Cancel edit</Button>}
           </div>
         </form>
@@ -314,7 +321,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
 
   if (previewOnly) {
     const sheet = visibleSheets[0];
-    const score = sheet && result(sheet.first_terminal, sheet.second_terminal);
+    const score = sheet && sheetResult(sheet);
     return (
       <main className="mx-auto max-w-3xl space-y-4 px-4 py-8">
         <Link className="text-white underline" to={`/print/${encodeURIComponent(certificateId)}`}>Back to Certificate</Link>
@@ -326,15 +333,16 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
                 <div>
                   <h2 className="text-lg font-semibold">{sheet.student_name}</h2>
                   <p>Registration No. {sheet.registration_no}</p>
+                  <p>{examCourses[sheet.exam_course].name}</p>
                   <p>Issue date {sheet.issued_on}</p>
                 </div>
                 <Table>
                   <TableHeader><TableRow><TableHead>Terminal</TableHead><TableHead>Course content</TableHead><TableHead>Marks</TableHead></TableRow></TableHeader>
-                  <TableBody>{terminals.map(([field, label, modules]) => (
+                  <TableBody>{examCourses[sheet.exam_course].modules.map(([field, label, modules]) => (
                     <TableRow key={field}><TableCell>{label}</TableCell><TableCell>{modules}</TableCell><TableCell>{sheet[field]}/100</TableCell></TableRow>
                   ))}</TableBody>
                 </Table>
-                <p className="font-medium">{score.total}/200 · {score.percentage}% · {score.pass ? "Pass" : "Fail"} · Grade {score.grade}</p>
+                <p className="font-medium">{score.total}/{score.maximum} · {score.percentage}% · {score.pass ? "Pass" : "Fail"} · Grade {score.grade}</p>
                 <Button variant="outline" onClick={() => download(sheet)}><Download className="mr-2 h-4 w-4" />Download PDF</Button>
               </>
             )}
@@ -359,7 +367,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
         <Card className="border-white/20 bg-white/10 backdrop-blur-lg">
           <CardHeader>
             <CardTitle className="text-white">Saved Mark Sheets</CardTitle>
-            <CardDescription className="text-gray-200">Find, edit and download DCA marksheets.</CardDescription>
+            <CardDescription className="text-gray-200">Find, edit and download marksheets.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="relative mb-4">
@@ -399,12 +407,14 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
                     </TableRow>
                   </TableHeader>
                   <TableBody>{sortedSheets.slice(start, start + pageSize).map(sheet => {
-                    const score = result(sheet.first_terminal, sheet.second_terminal);
+                    const score = sheetResult(sheet);
                     return <TableRow key={sheet.id} className="border-white/20 text-gray-200">
                       <TableCell className="font-medium text-white">{sheet.student_name}</TableCell>
                       <TableCell className="whitespace-nowrap font-mono text-xs">{sheet.registration_no}</TableCell>
                       <TableCell className="whitespace-nowrap">{sheet.issued_on}</TableCell>
-                      <TableCell>{sheet.first_terminal}/100</TableCell><TableCell>{sheet.second_terminal}/100</TableCell>
+                      <TableCell>{sheet.first_terminal}/100</TableCell>
+                      <TableCell>{sheet.exam_course === "cca" ? "–" : `${sheet.second_terminal}/100`}</TableCell>
+                      <TableCell>{sheet.third_terminal == null ? "–" : `${sheet.third_terminal}/100`}</TableCell>
                       <TableCell className="whitespace-nowrap">{score.pass ? "Pass" : "Fail"} · {score.percentage}%</TableCell>
                       <TableCell><div className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap">
                         <Button size="sm" aria-label="Edit Marksheet" title="Edit Marksheet" onClick={() => edit(sheet)} disabled={busy} className={`bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 ${actionStyle}`}><Edit className="h-4 w-4" /></Button>
@@ -414,7 +424,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
                         <Button size="sm" aria-label="Download PDF" title="Download PDF" onClick={() => download(sheet)} className={`bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 ${actionStyle}`}><Download className="h-4 w-4" /></Button>
                         {sheet.certificate_ref ? <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
                           <Link to={`/print/${encodeURIComponent(sheet.certificate_ref)}`} aria-label="View Certificate" title="View Certificate"><FileBadge className="h-4 w-4" /></Link>
-                        </Button> : score.pass && sheet.registration_no.split("/").length === 3 && <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
+                        </Button> : sheet.exam_course === "dca" && score.pass && sheet.registration_no.split("/").length === 3 && <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
                           <Link to={`/generate?marksheet=${encodeURIComponent(sheet.id)}`} aria-label="Create Certificate" title="Create Certificate"><FilePlus className="h-4 w-4" /></Link>
                         </Button>}
                         {isAdmin() && <Button size="sm" disabled={busy} aria-label="Delete Marksheet" title="Delete Marksheet" className={`bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 ${actionStyle}`} onClick={() => {
@@ -432,7 +442,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
       </div>
       <Dialog open={Boolean(editing)} onOpenChange={open => { if (!open && !busy) reset(); }}>
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
-          <DialogHeader><DialogTitle>Edit DCA Mark Sheet</DialogTitle><DialogDescription>Update the saved marksheet details.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Edit Marksheet</DialogTitle><DialogDescription>Update the saved marksheet details.</DialogDescription></DialogHeader>
           {formContent}
           {notice && <p role="status">{notice}</p>}
         </DialogContent>
