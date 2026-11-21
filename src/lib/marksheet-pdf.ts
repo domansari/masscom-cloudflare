@@ -28,8 +28,9 @@ export async function createMarksheetPdf(sheet: PrintableMarksheet) {
   return drawMarksheetPdf(sheet, logo, wordmark);
 }
 
-export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wordmark: Uint8Array) {
-  const pdf = new jsPDF({ unit: "pt", format: "letter", compress: true, putOnlyUsedFonts: true });
+export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wordmark: Uint8Array, existingPdf?: jsPDF) {
+  const pdf = existingPdf || new jsPDF({ unit: "pt", format: "letter", compress: true, putOnlyUsedFonts: true });
+  if (existingPdf) pdf.addPage("letter", "portrait");
   const course = examCourses[sheet.exam_course];
   const score = marksheetResult(sheet);
   const left = 87.5;
@@ -136,4 +137,14 @@ export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wo
   pdf.text("1st Floor, Mohsin Market, Yusufpur, Mohammadabad, Ghazipur (U.P.) 233227", 310, 749, { align: "center" });
   pdf.text("info@masscom.co.in  |  www.masscom.co.in", 310, 762, { align: "center" });
   return pdf;
+}
+
+export async function downloadMarksheetBatch(sheets: PrintableMarksheet[], batch: string) {
+  if (!sheets.length) throw new Error("No marksheets in the selected batch.");
+  const [logo, wordmark] = await Promise.all([imageBytes(logoUrl), imageBytes(wordmarkUrl)]);
+  let combined: jsPDF | undefined;
+  for (const sheet of sheets) {
+    combined = drawMarksheetPdf(sheet, logo, wordmark, combined);
+  }
+  combined!.save(`Marksheets_Batch_${batch.replace(/[^a-z0-9_-]/gi, "-")}.pdf`);
 }
