@@ -9,12 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CertificatePagination } from "@/components/manage-certificates/CertificatePagination";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { jsPDF } from "jspdf";
+import { createMarksheetPdf, type PrintableMarksheet } from "@/lib/marksheet-pdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 
-type Sheet = { id: string; registration_no: string; student_name: string; father_name: string | null; issued_on: string; first_terminal: number; second_terminal: number; third_terminal: number | null; exam_course: keyof typeof examCourses; certificate_ref: string | null };
+type Sheet = PrintableMarksheet & { id: string; certificate_ref: string | null };
 type Certificate = { id: string; certificate_id: string; student_name: string; roll_no?: string; batch_number?: string; course_name: string };
 const sortColumns = [
   ["student_name", "Student Name"],
@@ -30,96 +30,6 @@ const actionStyle = "h-8 w-8 shrink-0 p-0 text-white shadow-lg transition-all du
 
 const emptyForm = { roll_no: "", batch_code: "", year: "", certificate_ref: "", student_name: "", father_name: "", issued_on: "", first_terminal: "", second_terminal: "", third_terminal: "" };
 const normalize = (value?: string) => (value ?? "").trim().toLowerCase();
-
-function download(sheet: Sheet) {
-  const pdf = new jsPDF({ unit: "mm", format: "letter" });
-  const score = marksheetResult(sheet);
-  pdf.setLineWidth(0.6);
-  pdf.rect(11, 11, 194, 257);
-  pdf.setFontSize(17);
-  pdf.text("MASSCOM INFOTECH EDUCATION", 108, 29, { align: "center" });
-  pdf.setFontSize(14);
-  pdf.text("Statement of Marks", 108, 40, { align: "center" });
-  pdf.setFontSize(11);
-  const lines = [
-    ...pdf.splitTextToSize(`Registration No.  ${sheet.registration_no}`, 166),
-    ...pdf.splitTextToSize(`Student name  ${sheet.student_name}`, 166),
-    `Course  ${examCourses[sheet.exam_course].name}`,
-  ];
-  pdf.text(lines, 23, 57);
-  let y = 62 + lines.length * 5;
-  pdf.text("Course / Subject / Module", 23, y);
-  pdf.text("Maximum", 148, y);
-  pdf.text("Secured", 178, y);
-  for (const [key, label, modules] of examCourses[sheet.exam_course].modules) {
-    pdf.line(23, y + 3, 193, y + 3);
-    y += 12;
-    pdf.text(label, 23, y);
-    pdf.text("100", 154, y);
-    pdf.text(String(sheet[key]), 182, y);
-    pdf.text(pdf.splitTextToSize(modules, 112), 23, y + 6);
-    y += 18;
-  }
-  pdf.text(`Total: ${score.total}/${score.maximum}    Percentage: ${score.percentage}%    Grade: ${score.grade}`, 23, y + 7);
-  pdf.text("Passing requirement: at least 33/100 in each required exam.", 23, y + 17);
-  pdf.text("Prepared By", 23, 245);
-  pdf.text(`Date of Issue: ${sheet.issued_on}`, 79, 245);
-  pdf.text("Controller of Examination", 146, 245);
-  pdf.save(`${sheet.exam_course.toUpperCase()}-${sheet.registration_no.replace(/[^a-z0-9_-]/gi, "-")}.pdf`);
-}
-
-function printMarkSheet(sheet: Sheet) {
-  const printWindow = window.open("", "_blank", "popup,width=850,height=720");
-  if (!printWindow) return false;
-  const document = printWindow.document;
-  const score = marksheetResult(sheet);
-  const appendText = (tag: string, text: string, parent: HTMLElement = document.body) => {
-    const element = document.createElement(tag);
-    element.textContent = text;
-    parent.append(element);
-    return element;
-  };
-
-  document.title = "Print Marksheet";
-  appendText("style", `
-    @page { size: A4; margin: 15mm; }
-    body { font: 15px system-ui, sans-serif; color: #111; border: 2px solid #333; padding: 24px; }
-    h1, h2 { text-align: center; margin: 0 0 12px; }
-    table { width: 100%; border-collapse: collapse; margin: 24px 0; }
-    th, td { text-align: left; border: 1px solid #aaa; padding: 10px; }
-    footer { display: flex; justify-content: space-between; margin-top: 56px; }
-  `, document.head);
-  appendText("h1", "MASSCOM INFOTECH EDUCATION");
-  appendText("h2", "Statement of Marks");
-  appendText("p", `Registration No. ${sheet.registration_no}`);
-  appendText("p", `Student Name: ${sheet.student_name}`);
-  appendText("p", examCourses[sheet.exam_course].name);
-
-  const table = document.createElement("table");
-  document.body.append(table);
-  const headings = table.createTHead().insertRow();
-  for (const heading of ["Terminal / Course Content", "Maximum Marks", "Marks Secured"]) {
-    appendText("th", heading, headings);
-  }
-  const body = table.createTBody();
-  for (const [key, label, modules] of examCourses[sheet.exam_course].modules) {
-    const row = body.insertRow();
-    appendText("strong", label, row.insertCell());
-    appendText("div", modules, row.cells[0]);
-    row.insertCell().textContent = "100";
-    row.insertCell().textContent = String(sheet[key]);
-  }
-  appendText("p", `Total: ${score.total}/${score.maximum} · Percentage: ${score.percentage}% · Result: ${score.pass ? "Pass" : "Fail"} · Grade: ${score.grade}`);
-  appendText("p", "Passing requirement: at least 33/100 in each required exam.");
-  const footer = appendText("footer", "");
-  appendText("span", "Prepared By", footer);
-  appendText("span", `Date of Issue: ${sheet.issued_on}`, footer);
-  appendText("span", "Controller of Examination", footer);
-  printWindow.addEventListener("afterprint", () => printWindow.close(), { once: true });
-  printWindow.focus();
-  printWindow.print();
-  return true;
-}
 
 async function request(method = "GET", id?: string, body?: object) {
   const response = await fetch(`/api/marksheets${id ? `?id=${encodeURIComponent(id)}` : ""}`, {
@@ -161,6 +71,30 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [notice, setNotice] = useState("");
+
+  async function outputMarksheet(sheet: Sheet, print = false) {
+    setNotice("");
+    const printWindow = print ? window.open("", "_blank") : null;
+    if (print && !printWindow) {
+      setNotice("Allow pop-ups for this site to print the marksheet.");
+      return;
+    }
+    try {
+      const pdf = await createMarksheetPdf(sheet);
+      if (printWindow) {
+        pdf.autoPrint();
+        const url = URL.createObjectURL(pdf.output("blob"));
+        printWindow.opener = null;
+        printWindow.location.replace(url);
+        window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
+      } else {
+        pdf.save(`${sheet.exam_course.toUpperCase()}-${sheet.registration_no.replace(/[^a-z0-9_-]/gi, "-")}.pdf`);
+      }
+    } catch {
+      printWindow?.close();
+      setNotice("Unable to prepare the marksheet PDF. Please try again.");
+    }
+  }
 
   async function refresh() {
     setSheets((await request()).data);
@@ -372,9 +306,10 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
                   ))}</TableBody>
                 </Table>
                 <p className="font-medium">{score.total}/{score.maximum} · {score.percentage}% · {score.pass ? "Pass" : "Fail"} · Grade {score.grade}</p>
-                <Button variant="outline" onClick={() => download(sheet)}><Download className="mr-2 h-4 w-4" />Download PDF</Button>
+                <Button variant="outline" onClick={() => void outputMarksheet(sheet)}><Download className="mr-2 h-4 w-4" />Download PDF</Button>
               </>
             )}
+            {notice && <p role="status">{notice}</p>}
           </CardContent>
         </Card>
       </main>
@@ -448,10 +383,8 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
                       <TableCell className="whitespace-nowrap">{score.pass ? "Pass" : "Fail"} · {score.percentage}%</TableCell>
                       <TableCell><div className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap">
                         <Button size="sm" aria-label="Edit Marksheet" title="Edit Marksheet" onClick={() => edit(sheet)} disabled={busy} className={`bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 ${actionStyle}`}><Edit className="h-4 w-4" /></Button>
-                        <Button size="sm" aria-label="Print Marksheet" title="Print Marksheet" className={`bg-emerald-700 hover:bg-emerald-800 ${actionStyle}`} onClick={() => {
-                          if (!printMarkSheet(sheet)) setNotice("Allow pop-ups for this site to print the marksheet.");
-                        }}><Printer className="h-4 w-4" /></Button>
-                        <Button size="sm" aria-label="Download PDF" title="Download PDF" onClick={() => download(sheet)} className={`bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 ${actionStyle}`}><Download className="h-4 w-4" /></Button>
+                        <Button size="sm" aria-label="Print Marksheet" title="Print Marksheet" className={`bg-emerald-700 hover:bg-emerald-800 ${actionStyle}`} onClick={() => void outputMarksheet(sheet, true)}><Printer className="h-4 w-4" /></Button>
+                        <Button size="sm" aria-label="Download PDF" title="Download PDF" onClick={() => void outputMarksheet(sheet)} className={`bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 ${actionStyle}`}><Download className="h-4 w-4" /></Button>
                         {sheet.certificate_ref ? <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
                           <Link to={`/print/${encodeURIComponent(sheet.certificate_ref)}`} aria-label="View Certificate" title="View Certificate"><FileBadge className="h-4 w-4" /></Link>
                         </Button> : score.pass && sheet.registration_no.split("/").length === 3 && <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>

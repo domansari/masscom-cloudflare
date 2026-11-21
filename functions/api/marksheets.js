@@ -16,7 +16,7 @@ export async function onRequest({ request, env, allowLegacyRegistration = false 
 
     if (method === "GET") {
       const result = await env.DB.prepare(
-        "SELECT id, registration_no, student_name, father_name, first_terminal, second_terminal, third_terminal, COALESCE(publishing_course, exam_course) AS exam_course, issued_on, certificate_ref FROM marksheets ORDER BY updated_at DESC, id"
+        "SELECT id, registration_no, student_name, father_name, first_terminal, second_terminal, third_terminal, COALESCE(publishing_course, exam_course) AS exam_course, issued_on, certificate_ref, (SELECT duration FROM certificates WHERE certificates.id = marksheets.certificate_ref) AS duration FROM marksheets ORDER BY updated_at DESC, id"
       ).all();
       return json({ data: result.results });
     }
