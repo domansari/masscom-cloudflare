@@ -26,10 +26,10 @@ async function imageBytes(url: string) {
 
 async function controllerSignaturePng() {
   const image = new Image();
-  image.src = signatureUrl;
   await new Promise<void>((resolve, reject) => {
     image.onload = () => resolve();
     image.onerror = () => reject(new Error("Controller signature could not load."));
+    image.src = signatureUrl;
   });
   const canvas = document.createElement("canvas");
   canvas.width = 350;
