@@ -14,6 +14,7 @@ import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Header from "./components/Header";
+import MarkSheets from "./pages/MarkSheets";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,7 @@ const App = () => (
             <Routes>
               <Route path="/auth" element={<Auth />} />
               <Route path="/verify" element={<VerifyCertificate />} />
+              <Route path="/marksheets" element={<ProtectedRoute><MarkSheets /></ProtectedRoute>} />
               <Route 
                 path="/" 
                 element={
