@@ -1,3 +1,9 @@
+import { ArrowLeft, ArrowDown, ArrowUp, ArrowUpDown, Download, Edit, FilePlus, Printer, Search, Trash2 } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CertificatePagination } from "@/components/manage-certificates/CertificatePagination";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { jsPDF } from "jspdf";
@@ -11,6 +17,17 @@ const terminals = [
 ] as const;
 type Sheet = { id: string; registration_no: string; student_name: string; issued_on: string; first_terminal: number; second_terminal: number; certificate_ref: string | null };
 type Certificate = { id: string; certificate_id: string; student_name: string; roll_no?: string; batch_number?: string; course_name: string };
+const sortColumns = [
+  ["student_name", "Student Name"],
+  ["registration_no", "Registration No."],
+  ["issued_on", "Issue Date"],
+  ["first_terminal", "1st Terminal"],
+  ["second_terminal", "2nd Terminal"],
+] as const;
+type SortField = (typeof sortColumns)[number][0];
+const pageSize = 10;
+const actionStyle = "text-white shadow-lg transition-all duration-300 hover:scale-105";
+
 const emptyForm = { roll_no: "", batch_code: "", year: "", certificate_ref: "", student_name: "", issued_on: "", first_terminal: "", second_terminal: "" };
 const normalize = (value?: string) => (value ?? "").trim().toLowerCase();
 
@@ -80,6 +97,11 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
   const navigate = useNavigate();
   const showSaved = manage || Boolean(certificateId);
   const [search, setSearch] = useState("");
+  const [sortField, setSortField] = useState<SortField>("issued_on");
+  const [ascending, setAscending] = useState(false);
+  const [page, setPage] = useState(1);
+  const [loadError, setLoadError] = useState("");
+  const previewOnly = Boolean(certificateId);
   const [loading, setLoading] = useState(true);
   const [sheets, setSheets] = useState<Sheet[]>([]);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
@@ -94,10 +116,11 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
 
   useEffect(() => {
     if (!showSaved) return;
-    refresh().catch((error: Error) => setNotice(error.message)).finally(() => setLoading(false));
+    refresh().catch((error: Error) => setLoadError(error.message)).finally(() => setLoading(false));
   }, [showSaved]);
 
   useEffect(() => {
+    if (previewOnly || (manage && !editing)) return;
     let active = true;
     fetch("/api/certificates").then(async response => {
       if (!response.ok) throw new Error("Could not load certificates for linking.");
@@ -105,15 +128,13 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
       if (!active) return;
       const dca = data.filter(certificate => ["dca", "diploma in computer application", "diploma in computer applications"].includes(normalize(certificate.course_name)));
       setCertificates(dca);
-      const selected = dca.find(certificate => certificate.id === certificateId);
-      if (selected?.roll_no && selected.batch_number) {
-        setForm({ ...emptyForm, roll_no: selected.roll_no, batch_code: selected.batch_number, student_name: selected.student_name, certificate_ref: selected.id });
-      }
+
     }).catch((error: Error) => { if (active) setNotice(error.message); });
     return () => { active = false; };
-  }, [certificateId]);
+  }, [previewOnly, manage, editing]);
 
   function edit(sheet: Sheet) {
+    setNotice("");
     const [roll_no = "", batch_code = "", year = ""] = sheet.registration_no.split("/");
     setEditing(sheet.id);
     setForm({
@@ -125,10 +146,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
 
   function reset() {
     setEditing(undefined);
-    const selected = certificates.find(certificate => certificate.id === certificateId);
-    setForm(selected?.roll_no && selected.batch_number
-      ? { ...emptyForm, roll_no: selected.roll_no, batch_code: selected.batch_number, student_name: selected.student_name, certificate_ref: selected.id }
-      : emptyForm);
+    setForm(emptyForm);
   }
 
   async function change(method: string, id?: string, values?: object, createCertificate = false) {
@@ -151,10 +169,6 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (certificateId && form.certificate_ref !== certificateId) {
-      setNotice("Select this certificate before saving its mark sheet.");
-      return;
-    }
     const createCertificate = (event.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "certificate";
     void change(editing ? "PUT" : "POST", editing, {
       ...form, first_terminal: Number(form.first_terminal), second_terminal: Number(form.second_terminal),
@@ -170,16 +184,25 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
   const visibleSheets = sheets.filter(sheet => certificateId
     ? sheet.certificate_ref === certificateId
     : normalize(`${sheet.student_name} ${sheet.registration_no}`).includes(normalize(search)));
-  const showForm = !showSaved || Boolean(editing) || Boolean(certificateId && !loading && visibleSheets.length === 0);
+  const sortedSheets = visibleSheets.sort((a, b) => {
+    const first = a[sortField];
+    const second = b[sortField];
+    const comparison = typeof first === "number" && typeof second === "number"
+      ? first - second : String(first).localeCompare(String(second), "en-IN", { numeric: true });
+    return ascending ? comparison : -comparison;
+  });
+  const totalPages = Math.ceil(sortedSheets.length / pageSize);
+  const currentPage = Math.min(page, Math.max(1, totalPages));
+  const start = (currentPage - 1) * pageSize;
 
-  return (
-    <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8">
-      <div className="-order-2 flex flex-wrap gap-4 text-white">
-        <Link className="underline" to="/">Certificate portal</Link>
-        <Link className="underline" to={showSaved ? "/marksheets" : "/marksheets/manage"}>{showSaved ? "Create Mark Sheet" : "Manage Mark Sheets"}</Link>
-      </div>
-      {showForm && <section id="marksheet-form" className="space-y-4 rounded-lg bg-white p-5">
-        <h1 className="text-2xl font-bold">{editing ? "Edit DCA Mark Sheet" : "Create DCA Mark Sheet"}</h1>
+  function sortBy(field: SortField) {
+    setAscending(field === sortField ? !ascending : true);
+    setSortField(field);
+    setPage(1);
+  }
+
+  const formContent = (
+    <>
         <p>Passing requires at least 33 out of 100 in each terminal.</p>
         <form className="grid gap-4 sm:grid-cols-2" onSubmit={save}>
           <label>Roll No.<Input required maxLength={46} pattern="[^/]+" value={form.roll_no} onChange={e => setForm({ ...form, roll_no: e.target.value, certificate_ref: "" })} /></label>
@@ -187,7 +210,6 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
           <label>Year<Input required inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={form.year} onChange={e => setForm({ ...form, year: e.target.value })} /></label>
           <label>Student name<Input required maxLength={150} value={form.student_name} onChange={e => setForm({ ...form, student_name: e.target.value, certificate_ref: "" })} /></label>
           <p className="sm:col-span-2">Registration No. {form.roll_no || "Roll No."}/{form.batch_code || "Batch Code"}/{form.year || "Year"}</p>
-          {certificateId && matchingCertificates.length === 0 && <p className="sm:col-span-2">The certificate must have a matching roll number, batch code, and student name before it can be linked.</p>}
           <label>Link to certificate
             <select className="block w-full rounded-md border bg-white p-2" value={form.certificate_ref} onChange={e => setForm({ ...form, certificate_ref: e.target.value })}>
               <option value="">No certificate linked</option>
@@ -205,37 +227,147 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
             {editing && <Button type="button" variant="outline" onClick={reset}>Cancel edit</Button>}
           </div>
         </form>
-      </section>}
-      {notice && <p className="rounded-lg bg-white p-3" role="status">{notice}</p>}
-      {showSaved && <section id="saved-mark-sheets" className={`space-y-4 rounded-lg bg-white p-5 ${certificateId ? "-order-1" : ""}`}>
-        <h1 className="text-2xl font-bold">Saved Mark Sheets</h1>
-        {certificateId ? <Link className="underline" to="/marksheets/manage">Show all mark sheets</Link> : (
-          <label className="block max-w-md">Search saved mark sheets
-            <Input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Student name or registration number" />
-          </label>
-        )}
-        {loading ? <p role="status">Loading mark sheets…</p> : visibleSheets.length === 0 && <p>No mark sheets to display.</p>}
-        {visibleSheets.map(sheet => {
-          const score = result(sheet.first_terminal, sheet.second_terminal);
-          return <article key={sheet.id} className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-            <div><strong>{sheet.student_name}</strong><p>{sheet.registration_no} · {score.total}/200 · {score.percentage}% · {score.pass ? "Pass" : "Fail"}</p>
-              <p className="text-sm">1st Terminal {sheet.first_terminal}/100 · 2nd Terminal {sheet.second_terminal}/100</p>
+    </>
+  );
+
+  if (!showSaved) {
+    return (
+      <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8">
+        <div className="flex flex-wrap gap-4 text-white">
+          <Link className="underline" to="/">Certificate portal</Link>
+          <Link className="underline" to="/marksheets/manage">Manage Mark Sheets</Link>
+        </div>
+        <section className="space-y-4 rounded-lg bg-white p-5">
+          <h1 className="text-2xl font-bold">Create DCA Mark Sheet</h1>
+          {formContent}
+          <p role="status">{notice}</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (previewOnly) {
+    const sheet = visibleSheets[0];
+    const score = sheet && result(sheet.first_terminal, sheet.second_terminal);
+    return (
+      <main className="mx-auto max-w-3xl space-y-4 px-4 py-8">
+        <Link className="text-white underline" to={`/print/${encodeURIComponent(certificateId)}`}>Back to Certificate</Link>
+        <Card>
+          <CardHeader><CardTitle>Marksheet Preview</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            {loading ? <p role="status">Loading marksheet…</p> : loadError ? <p role="alert">{loadError}</p> : !sheet ? <p>No marksheet is linked to this certificate.</p> : (
+              <>
+                <div>
+                  <h2 className="text-lg font-semibold">{sheet.student_name}</h2>
+                  <p>Registration No. {sheet.registration_no}</p>
+                  <p>Issue date {sheet.issued_on}</p>
+                </div>
+                <Table>
+                  <TableHeader><TableRow><TableHead>Terminal</TableHead><TableHead>Course content</TableHead><TableHead>Marks</TableHead></TableRow></TableHeader>
+                  <TableBody>{terminals.map(([field, label, modules]) => (
+                    <TableRow key={field}><TableCell>{label}</TableCell><TableCell>{modules}</TableCell><TableCell>{sheet[field]}/100</TableCell></TableRow>
+                  ))}</TableBody>
+                </Table>
+                <p className="font-medium">{score.total}/200 · {score.percentage}% · {score.pass ? "Pass" : "Fail"} · Grade {score.grade}</p>
+                <Button variant="outline" onClick={() => download(sheet)}><Download className="mr-2 h-4 w-4" />Download PDF</Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
+  return (
+    <main className="relative min-h-screen bg-cover bg-center" style={{ backgroundImage: "url('/lovable-uploads/1c1f036d-97eb-4825-9766-e1ddb31b3f55.png')" }}>
+      <div className="absolute inset-0 bg-black/40" />
+      <nav className="relative border-b border-white/20 bg-white/10 shadow-sm backdrop-blur-lg">
+        <div className="mx-auto flex min-h-16 max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2 text-white sm:px-6 lg:px-8">
+          <Link className="flex items-center gap-3 hover:text-gray-200" to="/"><ArrowLeft className="h-5 w-5" />Back to Home</Link>
+          <h1 className="text-xl font-semibold">Manage Mark Sheets</h1>
+          <Button asChild size="sm" className={`bg-blue-600 hover:bg-blue-700 ${actionStyle}`}><Link to="/marksheets">Create Mark Sheet</Link></Button>
+        </div>
+      </nav>
+
+      <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <Card className="border-white/20 bg-white/10 backdrop-blur-lg">
+          <CardHeader>
+            <CardTitle className="text-white">Saved Mark Sheets</CardTitle>
+            <CardDescription className="text-gray-200">Find, edit and download DCA marksheets.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" aria-hidden="true" />
+              <Input type="search" aria-label="Search saved mark sheets" placeholder="Search by student name or registration number..." value={search}
+                onChange={event => { setSearch(event.target.value); setPage(1); }}
+                className="border-white/30 bg-white/20 pl-10 text-white placeholder:text-gray-300" />
             </div>
-            <div className="flex flex-wrap gap-2">
-              {sheet.certificate_ref && <Button asChild variant="outline"><Link to={`/print/${encodeURIComponent(sheet.certificate_ref)}`}>View certificate</Link></Button>}
-              {!sheet.certificate_ref && score.pass && sheet.registration_no.split("/").length === 3 && <Button asChild variant="outline"><Link to={`/generate?marksheet=${encodeURIComponent(sheet.id)}`}>Create Certificate</Link></Button>}
-              <Button variant="outline" onClick={() => {
-                edit(sheet);
-                requestAnimationFrame(() => document.getElementById("marksheet-form")?.scrollIntoView());
-              }} disabled={busy}>Edit</Button>
-              <Button variant="outline" onClick={() => download(sheet)}>Download PDF</Button>
-              {isAdmin() && <Button variant="destructive" disabled={busy} onClick={() => {
-                if (window.confirm(`Delete the mark sheet for ${sheet.registration_no}?`)) void change("DELETE", sheet.id);
-              }}>Delete</Button>}
+            <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-gray-200">
+              <span>Sort by</span>
+              <Select value={sortField} onValueChange={(field: SortField) => { setSortField(field); setPage(1); }}>
+                <SelectTrigger aria-label="Sort by" className="w-44 border-white/30 bg-white/20 text-white"><SelectValue /></SelectTrigger>
+                <SelectContent>{sortColumns.map(([field, label]) => <SelectItem value={field} key={field}>{label}</SelectItem>)}</SelectContent>
+              </Select>
+              <Button size="sm" onClick={() => { setAscending(!ascending); setPage(1); }} className={`bg-gradient-to-r from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 ${actionStyle}`}>
+                {ascending ? "Ascending" : "Descending"}<ArrowUpDown className="ml-2 h-4 w-4" />
+              </Button>
+              {sortedSheets.length > 0 && <span>Showing {start + 1}–{Math.min(start + pageSize, sortedSheets.length)} of {sortedSheets.length} marksheets</span>}
             </div>
-          </article>;
-        })}
-      </section>}
+            {notice && !editing && <p role="status" className="mb-4 text-white">{notice}</p>}
+            {loading ? <p role="status" className="py-8 text-center text-gray-200">Loading marksheets…</p> : loadError ? (
+              <p role="alert" className="py-8 text-center text-gray-200">{loadError}</p>
+            ) : sortedSheets.length === 0 ? (
+              <p className="py-8 text-center text-gray-200">{search ? "No marksheets match your search." : "No saved marksheets."}</p>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-white/20">
+                      {sortColumns.map(([field, label]) => {
+                        const Icon = sortField === field ? (ascending ? ArrowUp : ArrowDown) : ArrowUpDown;
+                        return <TableHead key={field} className="whitespace-nowrap text-white" aria-sort={sortField === field ? (ascending ? "ascending" : "descending") : undefined}>
+                          <Button size="sm" variant="ghost" className="h-auto gap-1 p-0 text-white hover:bg-white/20 hover:text-white" onClick={() => sortBy(field)}>{label}<Icon className="h-4 w-4" /></Button>
+                        </TableHead>;
+                      })}
+                      <TableHead className="text-white">Result</TableHead><TableHead className="text-white">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>{sortedSheets.slice(start, start + pageSize).map(sheet => {
+                    const score = result(sheet.first_terminal, sheet.second_terminal);
+                    return <TableRow key={sheet.id} className="border-white/20 text-gray-200">
+                      <TableCell className="font-medium text-white">{sheet.student_name}</TableCell>
+                      <TableCell className="whitespace-nowrap font-mono text-xs">{sheet.registration_no}</TableCell>
+                      <TableCell className="whitespace-nowrap">{sheet.issued_on}</TableCell>
+                      <TableCell>{sheet.first_terminal}/100</TableCell><TableCell>{sheet.second_terminal}/100</TableCell>
+                      <TableCell className="whitespace-nowrap">{score.pass ? "Pass" : "Fail"} · {score.percentage}%</TableCell>
+                      <TableCell><div className="flex gap-2">
+                        <Button size="sm" aria-label="Edit Marksheet" title="Edit Marksheet" onClick={() => edit(sheet)} disabled={busy} className={`bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 ${actionStyle}`}><Edit className="h-4 w-4" /></Button>
+                        <Button size="sm" aria-label="Download PDF" title="Download PDF" onClick={() => download(sheet)} className={`bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 ${actionStyle}`}><Download className="h-4 w-4" /></Button>
+                        {sheet.certificate_ref ? <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
+                          <Link to={`/print/${encodeURIComponent(sheet.certificate_ref)}`} aria-label="View Certificate" title="View Certificate"><Printer className="h-4 w-4" /></Link>
+                        </Button> : score.pass && sheet.registration_no.split("/").length === 3 && <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
+                          <Link to={`/generate?marksheet=${encodeURIComponent(sheet.id)}`} aria-label="Create Certificate" title="Create Certificate"><FilePlus className="h-4 w-4" /></Link>
+                        </Button>}
+                        {isAdmin() && <Button size="sm" disabled={busy} aria-label="Delete Marksheet" title="Delete Marksheet" className={`bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 ${actionStyle}`} onClick={() => {
+                          if (window.confirm(`Delete the mark sheet for ${sheet.registration_no}?`)) void change("DELETE", sheet.id);
+                        }}><Trash2 className="h-4 w-4" /></Button>}
+                      </div></TableCell>
+                    </TableRow>;
+                  })}</TableBody>
+                </Table>
+                <CertificatePagination currentPage={currentPage} totalPages={totalPages} onPageChange={setPage} />
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+      <Dialog open={Boolean(editing)} onOpenChange={open => { if (!open && !busy) reset(); }}>
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+          <DialogHeader><DialogTitle>Edit DCA Mark Sheet</DialogTitle><DialogDescription>Update the saved marksheet details.</DialogDescription></DialogHeader>
+          {formContent}
+          {notice && <p role="status">{notice}</p>}
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

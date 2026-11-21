@@ -2,7 +2,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Edit, Trash2, ArrowUpDown, Printer } from 'lucide-react';
+import { Edit, Trash2, ArrowUpDown, Printer, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface Certificate {
@@ -131,11 +131,11 @@ export const CertificateTable: React.FC<CertificateTableProps> = ({
                       <Printer className="h-4 w-4" />
                     </Button>
                   </Link>
-                  {["dca", "diploma in computer application", "diploma in computer applications"].includes(certificate.course_name.trim().toLowerCase()) && (
-                    <Button asChild size="sm" variant="outline">
-                      <Link to={`/marksheets/manage?certificate=${encodeURIComponent(certificate.id)}`}>View Marksheet</Link>
-                    </Button>
-                  )}
+                  <Button asChild size="sm" className="bg-gradient-to-r from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white shadow-lg transition-all duration-300 hover:scale-105">
+                    <Link to={`/marksheets/manage?certificate=${encodeURIComponent(certificate.id)}`} aria-label="View Marksheet" title="View Marksheet">
+                      <Eye className="h-4 w-4" />
+                    </Link>
+                  </Button>
                   {onDelete && <Button
                     size="sm"
                     onClick={() => onDelete(certificate)}

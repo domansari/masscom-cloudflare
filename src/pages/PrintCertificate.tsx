@@ -155,9 +155,7 @@ const PrintCertificate = () => {
             </Link>
             <h1 className="text-xl font-semibold">Print Certificate</h1>
             <div className="flex flex-wrap gap-2">
-              {["dca", "diploma in computer application", "diploma in computer applications"].includes(certificate.course_name.trim().toLowerCase()) && (
                 <Button asChild variant="outline"><Link to={`/marksheets/manage?certificate=${encodeURIComponent(certificate.id)}`}>View Marksheet</Link></Button>
-              )}
               <Button onClick={handlePrint} variant="outline">
                 <Printer className="mr-2 h-4 w-4" />
                 Print
