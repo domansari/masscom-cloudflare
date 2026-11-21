@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import React, { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { downloadCertificateBatch } from "@/lib/batch-certificates";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -52,6 +54,8 @@ const ManageCertificates = () => {
   const [deletePassword, setDeletePassword] = useState("");
   const [deletePasswordError, setDeletePasswordError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedBatch, setSelectedBatch] = useState("");
+  const [batchDownloading, setBatchDownloading] = useState(false);
 
   const { data: certificates = [], isLoading } = useQuery({
     queryKey: ['certificates'],
@@ -65,6 +69,24 @@ const ManageCertificates = () => {
       return result.data || [];
     }
   });
+
+  const batchCodes: string[] = Array.from(new Set<string>(certificates.map((c: Certificate) => c.batch_number?.trim() || "").filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const batchCount = certificates.filter((c: Certificate) => c.batch_number?.trim() === selectedBatch).length;
+
+  const downloadBatch = async () => {
+    if (!selectedBatch || batchDownloading) return;
+    setBatchDownloading(true);
+    try {
+      const records = certificates.filter((c: Certificate) => c.batch_number?.trim() === selectedBatch)
+        .sort((a: Certificate, b: Certificate) => (a.roll_no || "").localeCompare(b.roll_no || "", undefined, { numeric: true }) || a.student_name.localeCompare(b.student_name));
+      await downloadCertificateBatch(records, selectedBatch);
+      toast({ title: "Batch PDF downloaded", description: records.length + " certificates, one per page." });
+    } catch (error) {
+      toast({ title: "Batch download failed", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    } finally {
+      setBatchDownloading(false);
+    }
+  };
 
   const confirmDelete = async () => {
     if (!canDelete) return;
@@ -305,6 +327,16 @@ const ManageCertificates = () => {
           </CardHeader>
           <CardContent>
             {canDelete && <ExcelBackup type="certificates" />}
+            <div className="mb-5 flex flex-wrap items-center gap-3 rounded-md bg-white/90 p-3 text-gray-900">
+              <span className="font-medium">Download Certificates by Batch</span>
+              <Select value={selectedBatch} onValueChange={setSelectedBatch}>
+                <SelectTrigger className="w-52"><SelectValue placeholder="Select Batch Code" /></SelectTrigger>
+                <SelectContent>{batchCodes.map(batch => <SelectItem key={batch} value={batch}>{batch}</SelectItem>)}</SelectContent>
+              </Select>
+              <Button onClick={() => void downloadBatch()} disabled={!selectedBatch || batchDownloading}>
+                <Download className="mr-2 h-4 w-4" />{batchDownloading ? "Preparing PDF..." : "Download Batch PDF" + (selectedBatch ? " (" + batchCount + ")" : "")}
+              </Button>
+            </div>
             <CertificateFilters
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
