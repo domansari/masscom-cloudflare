@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import { examCourses, marksheetResult, passingMark } from "../../functions/api/_exam-courses.js";
 import logoUrl from "@/assets/marksheet-logo.png";
 import wordmarkUrl from "@/assets/marksheet-wordmark.png";
+import signatureUrl from "@/assets/controller-signature.svg";
 
 export type PrintableMarksheet = {
   registration_no: string;
@@ -23,12 +24,28 @@ async function imageBytes(url: string) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-export async function createMarksheetPdf(sheet: PrintableMarksheet) {
-  const [logo, wordmark] = await Promise.all([imageBytes(logoUrl), imageBytes(wordmarkUrl)]);
-  return drawMarksheetPdf(sheet, logo, wordmark);
+async function controllerSignaturePng() {
+  const image = new Image();
+  image.src = signatureUrl;
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("Controller signature could not load."));
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = 350;
+  canvas.height = 450;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Cannot render controller signature.");
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/png");
 }
 
-export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wordmark: Uint8Array, existingPdf?: jsPDF) {
+export async function createMarksheetPdf(sheet: PrintableMarksheet) {
+  const [logo, wordmark, signature] = await Promise.all([imageBytes(logoUrl), imageBytes(wordmarkUrl), controllerSignaturePng()]);
+  return drawMarksheetPdf(sheet, logo, wordmark, undefined, signature);
+}
+
+export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wordmark: Uint8Array, existingPdf?: jsPDF, signature?: string) {
   const pdf = existingPdf || new jsPDF({ unit: "pt", format: "letter", compress: true, putOnlyUsedFonts: true });
   if (existingPdf) pdf.addPage("letter", "portrait");
   const course = examCourses[sheet.exam_course];
@@ -129,6 +146,7 @@ export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wo
     pdf.line(start, 687, end, 687);
     pdf.text(label, (start + end) / 2, 703, { align: "center" });
   });
+  if (signature) pdf.addImage(signature, "PNG", 440, 647, 48, 39);
   pdf.line(61, 712, 560, 712);
   font("normal", 8.5);
   pdf.text("Grade: >75% Excellent | >50% to 75% Good | up to 50% Satisfactory (when passed)", 310, 724, { align: "center" });
@@ -141,10 +159,10 @@ export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wo
 
 export async function downloadMarksheetBatch(sheets: PrintableMarksheet[], batch: string) {
   if (!sheets.length) throw new Error("No marksheets in the selected batch.");
-  const [logo, wordmark] = await Promise.all([imageBytes(logoUrl), imageBytes(wordmarkUrl)]);
+  const [logo, wordmark, signature] = await Promise.all([imageBytes(logoUrl), imageBytes(wordmarkUrl), controllerSignaturePng()]);
   let combined: jsPDF | undefined;
   for (const sheet of sheets) {
-    combined = drawMarksheetPdf(sheet, logo, wordmark, combined);
+    combined = drawMarksheetPdf(sheet, logo, wordmark, combined, signature);
   }
   combined!.save(`Marksheets_Batch_${batch.replace(/[^a-z0-9_-]/gi, "-")}.pdf`);
 }
