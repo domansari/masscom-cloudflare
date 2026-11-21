@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle
+  Card, CardContent, CardHeader, CardTitle
 } from "@/components/ui/card";
 import QRCode from "qrcode";
+import CertificatePortalIntro from "@/components/CertificatePortalIntro";
 
 type LoginMethod = "password" | "otp";
 
@@ -170,15 +171,13 @@ export default function Auth() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-black/40 px-4 py-8 sm:py-12">
+      <CertificatePortalIntro />
       <Card className="w-full max-w-md bg-white/10 backdrop-blur-lg border-white/20">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl text-white">
             Staff Login
           </CardTitle>
-          <CardDescription className="text-gray-300">
-            MASSCOM Certificate Management
-          </CardDescription>
         </CardHeader>
 
         <CardContent>

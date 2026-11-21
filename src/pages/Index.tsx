@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { FileText, Search, Plus, Settings, Shield, Cpu, Database } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import CertificatePortalIntro from "@/components/CertificatePortalIntro";
 
 const Index = () => {
   const { profile } = useAuth();
@@ -14,14 +15,8 @@ const Index = () => {
       <div className="absolute inset-0 bg-black/40"></div>
       
       <div className="container mx-auto px-4 py-12 relative z-10">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">
-            Certificate Management System
-          </h1>
-          <p className="text-xl text-gray-200 max-w-2xl mx-auto">
-            Generate, manage, and verify digital certificates with ease. 
-            Secure, professional, and efficient certificate management for educational institutions.
-          </p>
+        <div className="mb-12">
+          <CertificatePortalIntro />
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
