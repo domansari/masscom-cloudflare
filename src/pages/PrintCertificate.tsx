@@ -148,13 +148,16 @@ const PrintCertificate = () => {
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white shadow-sm border-b no-print">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex min-h-16 flex-wrap items-center justify-between gap-2 py-2">
             <Link to="/manage" className="flex items-center space-x-3 text-gray-900 hover:text-primary">
               <ArrowLeft className="h-5 w-5" />
               <span>Back to Manage</span>
             </Link>
             <h1 className="text-xl font-semibold">Print Certificate</h1>
-            <div className="flex space-x-2">
+            <div className="flex flex-wrap gap-2">
+              {["dca", "diploma in computer application", "diploma in computer applications"].includes(certificate.course_name.trim().toLowerCase()) && (
+                <Button asChild variant="outline"><Link to={`/marksheets?certificate=${encodeURIComponent(certificate.id)}`}>Mark Sheet</Link></Button>
+              )}
               <Button onClick={handlePrint} variant="outline">
                 <Printer className="mr-2 h-4 w-4" />
                 Print
