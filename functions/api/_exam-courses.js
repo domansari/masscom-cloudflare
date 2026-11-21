@@ -1,10 +1,13 @@
+const dcaModules = [
+  ["first_terminal", "1st Terminal", "Computer Fundamentals, MS-DOS, MS-Windows 7"],
+  ["second_terminal", "2nd Terminal", "MS Word, MS Excel, MS Access, MS PowerPoint, Internet"],
+];
+const publishingModules = "Pagemaker-7, Coral Draw 12, Photoshop CS, Mr. Photo";
+
 export const examCourses = {
   dca: {
     name: "Diploma in Computer Application",
-    modules: [
-      ["first_terminal", "1st Terminal", "Computer Fundamentals, MS-DOS, MS-Windows 7"],
-      ["second_terminal", "2nd Terminal", "MS Word, MS Excel, MS Access, MS PowerPoint, Internet"],
-    ],
+    modules: dcaModules,
   },
   cca: {
     name: "Certificate Course in Computer Accountancy",
@@ -13,10 +16,17 @@ export const examCourses = {
   adca: {
     name: "Advance Diploma in Computer Accountancy",
     modules: [
-      ["first_terminal", "1st Terminal", "Computer Fundamentals, MS-DOS, MS-Windows 7"],
-      ["second_terminal", "2nd Terminal", "MS Word, MS Excel, MS Access, MS PowerPoint, Internet"],
+      ...dcaModules,
       ["third_terminal", "3rd Terminal", "Basics of Accountancy & Tally.ERP 9 With (GST & PAYROLL)"],
     ],
+  },
+  cdtp: {
+    name: "Certificate Course in Desktop Publishing",
+    modules: [["first_terminal", "Module 1", publishingModules]],
+  },
+  adtp: {
+    name: "Advance Diploma in Desktop Publishing",
+    modules: [...dcaModules, ["third_terminal", "3rd Terminal", publishingModules]],
   },
 };
 

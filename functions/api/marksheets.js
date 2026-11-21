@@ -1,5 +1,5 @@
 import { confirmDeletePassword } from "./_delete-password.js";
-import { examCourseCode, validExamMarks } from "./_exam-courses.js";
+import { examCourseCode, examCourses, validExamMarks } from "./_exam-courses.js";
 import { requireAdmin, requireCertificateUser, sameOrigin } from "./_admin.js";
 
 const json = (data, status = 200) => Response.json(data, {
@@ -16,7 +16,7 @@ export async function onRequest({ request, env }) {
 
     if (method === "GET") {
       const result = await env.DB.prepare(
-        "SELECT id, registration_no, student_name, father_name, first_terminal, second_terminal, third_terminal, exam_course, issued_on, certificate_ref FROM marksheets ORDER BY updated_at DESC, id"
+        "SELECT id, registration_no, student_name, father_name, first_terminal, second_terminal, third_terminal, COALESCE(publishing_course, exam_course) AS exam_course, issued_on, certificate_ref FROM marksheets ORDER BY updated_at DESC, id"
       ).all();
       return json({ data: result.results });
     }
@@ -39,14 +39,13 @@ export async function onRequest({ request, env }) {
     const student = typeof data?.student_name === "string" ? data.student_name.trim() : "";
     const date = data?.issued_on;
     const existing = method === "PUT"
-      ? await env.DB.prepare("SELECT exam_course, father_name FROM marksheets WHERE id = ?").bind(id).first()
+      ? await env.DB.prepare("SELECT COALESCE(publishing_course, exam_course) AS exam_course, father_name FROM marksheets WHERE id = ?").bind(id).first()
       : null;
     if (method === "PUT" && !existing) return json({ error: "Mark sheet not found" }, 404);
     const examCode = existing?.exam_course ?? data?.exam_course ?? "dca";
     const father = typeof data?.father_name === "string" ? data.father_name.trim() : existing?.father_name ?? "";
     const first = data?.first_terminal;
-    const second = examCode === "cca" ? 0 : data?.second_terminal;
-    const third = examCode === "adca" ? data?.third_terminal : null;
+
     const parsedDate = typeof date === "string" ? new Date(date) : new Date(NaN);
     if (!roll || !batch || !/^\d{4}$/.test(year) || !parts.every(part => /^[^/\x00-\x1f]+$/.test(part)) ||
         registration.length > 100 || !student || student.length > 150 || father.length > 150 ||
@@ -68,12 +67,16 @@ export async function onRequest({ request, env }) {
         return json({ error: "Choose a certificate for the same course with the same roll number, batch code, and student name." }, 400);
       }
     }
+    const moduleCount = examCourses[examCode].modules.length;
+    const second = moduleCount >= 2 ? data.second_terminal : 0;
+    const third = moduleCount >= 3 ? data.third_terminal : null;
+    const publishingCourse = ["cdtp", "adtp"].includes(examCode) ? examCode : null;
     const sheetId = method === "POST" ? crypto.randomUUID() : id;
     const values = [registration, student, father || null, first, second, third, date, certificateRef];
     const result = method === "POST"
       ? await env.DB.prepare(
-        "INSERT INTO marksheets (registration_no, student_name, father_name, first_terminal, second_terminal, third_terminal, issued_on, certificate_ref, id, created_by, exam_course) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      ).bind(...values, sheetId, account.id, examCode).run()
+        "INSERT INTO marksheets (registration_no, student_name, father_name, first_terminal, second_terminal, third_terminal, issued_on, certificate_ref, id, created_by, exam_course, publishing_course) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).bind(...values, sheetId, account.id, publishingCourse ? "dca" : examCode, publishingCourse).run()
       : await env.DB.prepare(
         "UPDATE marksheets SET registration_no = ?, student_name = ?, father_name = ?, first_terminal = ?, second_terminal = ?, third_terminal = ?, issued_on = ?, certificate_ref = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
       ).bind(...values, id).run();

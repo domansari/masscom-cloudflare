@@ -441,7 +441,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
                       <TableCell className="whitespace-nowrap font-mono text-xs">{sheet.registration_no}</TableCell>
                       <TableCell className="whitespace-nowrap">{sheet.issued_on}</TableCell>
                       <TableCell>{sheet.first_terminal}/100</TableCell>
-                      <TableCell>{sheet.exam_course === "cca" ? "–" : `${sheet.second_terminal}/100`}</TableCell>
+                      <TableCell>{examCourses[sheet.exam_course].modules.length === 1 ? "–" : `${sheet.second_terminal}/100`}</TableCell>
                       <TableCell>{sheet.third_terminal == null ? "–" : `${sheet.third_terminal}/100`}</TableCell>
                       <TableCell className="whitespace-nowrap">{score.pass ? "Pass" : "Fail"} · {score.percentage}%</TableCell>
                       <TableCell><div className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap">

@@ -67,6 +67,8 @@ const GenerateCertificate = () => {
     "Advance Diploma in Computer Application",
     examCourses.cca.name,
     examCourses.adca.name,
+    examCourses.cdtp.name,
+    examCourses.adtp.name,
     "Diploma in DTP"
   ];
 
@@ -83,6 +85,7 @@ const GenerateCertificate = () => {
     let duration = "";
     switch (formData.courseName) {
       case examCourses.cca.name:
+      case examCourses.cdtp.name:
       case "Diploma in DTP":
         duration = "4 Months";
         break;
@@ -298,10 +301,10 @@ const GenerateCertificate = () => {
                     type="text"
                     id="duration"
                     value={formData.duration}
-                    readOnly={examCode !== "adca"}
+                    readOnly={examCode !== "adca" && examCode !== "adtp"}
                     onChange={handleChange}
                     className="bg-white/10 border-white/30 text-white"
-                    placeholder={examCode === "adca" ? "Enter course duration" : "Auto-selected based on course"}
+                    placeholder={examCode === "adca" || examCode === "adtp" ? "Enter course duration" : "Auto-selected based on course"}
                   />
                 </div>
               </div>

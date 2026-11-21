@@ -147,7 +147,7 @@ export async function onRequestPost({ request, env }) {
         return Response.json({ error: "Invalid mark sheet ID" }, { status: 400 });
       }
       const sheet = await env.DB.prepare(
-        "SELECT registration_no, student_name, father_name, exam_course, first_terminal, second_terminal, third_terminal FROM marksheets WHERE id = ? AND certificate_ref IS NULL"
+        "SELECT registration_no, student_name, father_name, COALESCE(publishing_course, exam_course) AS exam_course, first_terminal, second_terminal, third_terminal FROM marksheets WHERE id = ? AND certificate_ref IS NULL"
       ).bind(markSheetId).first();
       const parts = sheet?.registration_no.split("/");
       if (!sheet || parts.length !== 3 || !parts[0] || !parts[1] || !/^\d{4}$/.test(parts[2]) ||
@@ -165,7 +165,7 @@ export async function onRequestPost({ request, env }) {
           `INSERT INTO certificates (${columns.join(", ")})
            SELECT ${placeholders} FROM marksheets
            WHERE id = ? AND registration_no = ? AND student_name = ? AND certificate_ref IS NULL
-             AND exam_course = ? AND first_terminal = ? AND second_terminal = ? AND third_terminal IS ?
+             AND COALESCE(publishing_course, exam_course) = ? AND first_terminal = ? AND second_terminal = ? AND third_terminal IS ?
              AND NOT EXISTS (
                SELECT 1 FROM certificates WHERE lower(trim(roll_no)) = lower(?)
                  AND lower(trim(batch_number)) = lower(?) AND lower(trim(student_name)) = lower(?)
