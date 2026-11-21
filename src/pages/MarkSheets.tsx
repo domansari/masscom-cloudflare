@@ -1,4 +1,4 @@
-import { examCourseCode, examCourses, passingMark } from "../../functions/api/_exam-courses.js";
+import { examCourseCode, examCourses, examResult, marksheetResult, passingMark } from "../../functions/api/_exam-courses.js";
 import { ArrowLeft, ArrowDown, ArrowUp, ArrowUpDown, Download, Edit, FileBadge, FilePlus, Printer, Search, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 
-type Sheet = { id: string; registration_no: string; student_name: string; issued_on: string; first_terminal: number; second_terminal: number; third_terminal: number | null; exam_course: keyof typeof examCourses; certificate_ref: string | null };
+type Sheet = { id: string; registration_no: string; student_name: string; father_name: string | null; issued_on: string; first_terminal: number; second_terminal: number; third_terminal: number | null; exam_course: keyof typeof examCourses; certificate_ref: string | null };
 type Certificate = { id: string; certificate_id: string; student_name: string; roll_no?: string; batch_number?: string; course_name: string };
 const sortColumns = [
   ["student_name", "Student Name"],
@@ -26,25 +26,12 @@ type SortField = (typeof sortColumns)[number][0];
 const pageSize = 10;
 const actionStyle = "h-8 w-8 shrink-0 p-0 text-white shadow-lg transition-all duration-300 hover:scale-105";
 
-const emptyForm = { roll_no: "", batch_code: "", year: "", certificate_ref: "", student_name: "", issued_on: "", first_terminal: "", second_terminal: "", third_terminal: "" };
+const emptyForm = { roll_no: "", batch_code: "", year: "", certificate_ref: "", student_name: "", father_name: "", issued_on: "", first_terminal: "", second_terminal: "", third_terminal: "" };
 const normalize = (value?: string) => (value ?? "").trim().toLowerCase();
-
-function result(...marks: number[]) {
-  const total = marks.reduce((sum, mark) => sum + mark, 0);
-  const maximum = marks.length * 100;
-  const percentage = total / marks.length;
-  const pass = marks.every(mark => mark >= passingMark);
-  return { total, maximum, percentage: percentage.toFixed(2), pass,
-    grade: !pass ? "Fail" : percentage > 75 ? "Excellent" : percentage > 50 ? "Good" : "Satisfactory" };
-}
-
-function sheetResult(sheet: Sheet) {
-  return result(...examCourses[sheet.exam_course].modules.map(([field]) => Number(sheet[field])));
-}
 
 function download(sheet: Sheet) {
   const pdf = new jsPDF({ unit: "mm", format: "letter" });
-  const score = sheetResult(sheet);
+  const score = marksheetResult(sheet);
   pdf.setLineWidth(0.6);
   pdf.rect(11, 11, 194, 257);
   pdf.setFontSize(17);
@@ -83,7 +70,7 @@ function printMarkSheet(sheet: Sheet) {
   const printWindow = window.open("", "_blank", "popup,width=850,height=720");
   if (!printWindow) return false;
   const document = printWindow.document;
-  const score = sheetResult(sheet);
+  const score = marksheetResult(sheet);
   const appendText = (tag: string, text: string, parent: HTMLElement = document.body) => {
     const element = document.createElement(tag);
     element.textContent = text;
@@ -198,7 +185,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
     setEditingCourse(sheet.exam_course);
     setForm({
       ...emptyForm, roll_no, batch_code, year, certificate_ref: sheet.certificate_ref ?? "",
-      student_name: sheet.student_name, issued_on: sheet.issued_on,
+      student_name: sheet.student_name, father_name: sheet.father_name ?? "", issued_on: sheet.issued_on,
       first_terminal: String(sheet.first_terminal), second_terminal: String(sheet.second_terminal), third_terminal: String(sheet.third_terminal ?? ""),
     });
   }
@@ -236,7 +223,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
   }
 
   const preview = terminals.every(([field]) => form[field] !== "")
-    ? result(...terminals.map(([field]) => Number(form[field]))) : null;
+    ? examResult(terminals.map(([field]) => Number(form[field]))) : null;
   const matchingCertificates = certificates.filter(certificate => examCourseCode(certificate.course_name) === editingCourse && form.roll_no.trim() && form.batch_code.trim() &&
     normalize(certificate.roll_no) === normalize(form.roll_no) &&
     normalize(certificate.batch_number) === normalize(form.batch_code) &&
@@ -280,6 +267,9 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
           <label>Batch Code<Input required maxLength={46} pattern="[^/]+" value={form.batch_code} onChange={e => setForm({ ...form, batch_code: e.target.value, certificate_ref: "" })} /></label>
           <label>Year<Input required inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={form.year} onChange={e => setForm({ ...form, year: e.target.value })} /></label>
           <label>Student name<Input required maxLength={150} value={form.student_name} onChange={e => setForm({ ...form, student_name: e.target.value, certificate_ref: "" })} /></label>
+          <label className="sm:col-span-2">Father’s Name
+            <Input maxLength={150} value={form.father_name} onChange={event => setForm({ ...form, father_name: event.target.value })} />
+          </label>
           <p className="sm:col-span-2">Registration No. {form.roll_no || "Roll No."}/{form.batch_code || "Batch Code"}/{form.year || "Year"}</p>
           <label>Link to certificate
             <select className={`block w-full rounded-md border p-2 ${showSaved ? "bg-white" : "border-white/30 bg-white/20 text-white [&>option]:bg-slate-900"}`} value={form.certificate_ref} onChange={e => setForm({ ...form, certificate_ref: e.target.value })}>
@@ -332,7 +322,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
 
   if (previewOnly) {
     const sheet = visibleSheets[0];
-    const score = sheet && sheetResult(sheet);
+    const score = sheet && marksheetResult(sheet);
     return (
       <main className="mx-auto max-w-3xl space-y-4 px-4 py-8">
         <Link className="text-white underline" to={`/print/${encodeURIComponent(certificateId)}`}>Back to Certificate</Link>
@@ -418,7 +408,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
                     </TableRow>
                   </TableHeader>
                   <TableBody>{sortedSheets.slice(start, start + pageSize).map(sheet => {
-                    const score = sheetResult(sheet);
+                    const score = marksheetResult(sheet);
                     return <TableRow key={sheet.id} className="border-white/20 text-gray-200">
                       <TableCell className="font-medium text-white">{sheet.student_name}</TableCell>
                       <TableCell className="whitespace-nowrap font-mono text-xs">{sheet.registration_no}</TableCell>

@@ -41,3 +41,16 @@ export function validExamMarks(code, marks, minimum = 0) {
     Number.isInteger(marks?.[field]) && marks[field] >= minimum && marks[field] <= 100
   );
 }
+
+export function examResult(marks) {
+  const total = marks.reduce((sum, mark) => sum + mark, 0);
+  const maximum = marks.length * 100;
+  const percentage = total / marks.length;
+  const pass = marks.every(mark => mark >= passingMark);
+  return { total, maximum, percentage: percentage.toFixed(2), pass,
+    grade: !pass ? "Fail" : percentage > 75 ? "Excellent" : percentage > 50 ? "Good" : "Satisfactory" };
+}
+
+export function marksheetResult(sheet) {
+  return examResult(examCourses[sheet.exam_course].modules.map(([field]) => sheet[field]));
+}

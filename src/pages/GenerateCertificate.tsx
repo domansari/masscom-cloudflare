@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import QRCodeGenerator from "@/components/QRCodeGenerator";
 import CertificatePreview from "@/components/CertificatePreview";
-import { examCourseCode, examCourses, passingMark, validExamMarks } from "../../functions/api/_exam-courses.js";
+import { examCourseCode, examCourses, marksheetResult, passingMark, validExamMarks } from "../../functions/api/_exam-courses.js";
 import { CertificateData } from "@/types/certificate";
 
 const GenerateCertificate = () => {
@@ -52,7 +52,7 @@ const GenerateCertificate = () => {
           !validExamMarks(sheet.exam_course, sheet, passingMark)) {
         throw new Error("Choose an unlinked mark sheet with passing marks in each required exam.");
       }
-      setFormData(current => ({ ...current, studentName: sheet.student_name, rollNo: registration[0], courseName: examCourses[sheet.exam_course].name }));
+      setFormData(current => ({ ...current, studentName: sheet.student_name, fatherName: sheet.father_name ?? "", grade: marksheetResult(sheet).grade, rollNo: registration[0], courseName: examCourses[sheet.exam_course].name }));
       setBatchNumber(registration[1]);
       setReadySheetId(markSheetId);
     }).catch(error => {
@@ -263,8 +263,9 @@ const GenerateCertificate = () => {
                     required
                   />
                 </div>
-                <div>
-                  <Label htmlFor="fatherName" className="text-white">Father's Name</Label>
+              </div>
+              <div>
+                <Label htmlFor="fatherName" className="text-white">Father's Name</Label>
                   <Input
                     type="text"
                     id="fatherName"
@@ -273,7 +274,6 @@ const GenerateCertificate = () => {
                     onChange={handleChange}
                     className="bg-white/20 border-white/30 text-white placeholder:text-gray-300"
                   />
-                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -320,7 +320,7 @@ const GenerateCertificate = () => {
                 </div>
                 <div>
                   <Label htmlFor="grade" className="text-white">Grade</Label>
-                  <Select onValueChange={(value) => handleSelectChange('grade', value)}>
+                  <Select value={formData.grade} disabled={Boolean(markSheetId)} onValueChange={(value) => handleSelectChange('grade', value)}>
                     <SelectTrigger className="bg-white/20 border-white/30 text-white">
                       <SelectValue placeholder="Select grade" />
                     </SelectTrigger>

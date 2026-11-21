@@ -1,5 +1,5 @@
 
-import { examCourseCode, examCourseNames, passingMark, validExamMarks } from "../_exam-courses.js";
+import { examCourseCode, examCourseNames, marksheetResult, passingMark, validExamMarks } from "../_exam-courses.js";
 import { requireCertificateUser, sameOrigin } from "../_admin.js";
 
 export async function onRequestGet({ request, env }) {
@@ -147,7 +147,7 @@ export async function onRequestPost({ request, env }) {
         return Response.json({ error: "Invalid mark sheet ID" }, { status: 400 });
       }
       const sheet = await env.DB.prepare(
-        "SELECT registration_no, student_name, exam_course, first_terminal, second_terminal, third_terminal FROM marksheets WHERE id = ? AND certificate_ref IS NULL"
+        "SELECT registration_no, student_name, father_name, exam_course, first_terminal, second_terminal, third_terminal FROM marksheets WHERE id = ? AND certificate_ref IS NULL"
       ).bind(markSheetId).first();
       const parts = sheet?.registration_no.split("/");
       if (!sheet || parts.length !== 3 || !parts[0] || !parts[1] || !/^\d{4}$/.test(parts[2]) ||
@@ -157,6 +157,8 @@ export async function onRequestPost({ request, env }) {
       }
 
       // Recheck eligibility inside the transaction and link only the newly inserted certificate.
+      values.grade = marksheetResult(sheet).grade;
+      values.father_name ??= sheet.father_name;
       const courseNames = examCourseNames(examCode);
       const [created] = await env.DB.batch([
         env.DB.prepare(

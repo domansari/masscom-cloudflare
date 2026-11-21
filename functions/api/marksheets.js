@@ -15,7 +15,7 @@ export async function onRequest({ request, env }) {
 
     if (method === "GET") {
       const result = await env.DB.prepare(
-        "SELECT id, registration_no, student_name, first_terminal, second_terminal, third_terminal, exam_course, issued_on, certificate_ref FROM marksheets ORDER BY updated_at DESC, id"
+        "SELECT id, registration_no, student_name, father_name, first_terminal, second_terminal, third_terminal, exam_course, issued_on, certificate_ref FROM marksheets ORDER BY updated_at DESC, id"
       ).all();
       return json({ data: result.results });
     }
@@ -36,16 +36,17 @@ export async function onRequest({ request, env }) {
     const student = typeof data?.student_name === "string" ? data.student_name.trim() : "";
     const date = data?.issued_on;
     const existing = method === "PUT"
-      ? await env.DB.prepare("SELECT exam_course FROM marksheets WHERE id = ?").bind(id).first()
+      ? await env.DB.prepare("SELECT exam_course, father_name FROM marksheets WHERE id = ?").bind(id).first()
       : null;
     if (method === "PUT" && !existing) return json({ error: "Mark sheet not found" }, 404);
     const examCode = existing?.exam_course ?? data?.exam_course ?? "dca";
+    const father = typeof data?.father_name === "string" ? data.father_name.trim() : existing?.father_name ?? "";
     const first = data?.first_terminal;
     const second = examCode === "cca" ? 0 : data?.second_terminal;
     const third = examCode === "adca" ? data?.third_terminal : null;
     const parsedDate = typeof date === "string" ? new Date(date) : new Date(NaN);
     if (!roll || !batch || !/^\d{4}$/.test(year) || !parts.every(part => /^[^/\x00-\x1f]+$/.test(part)) ||
-        registration.length > 100 || !student || student.length > 150 ||
+        registration.length > 100 || !student || student.length > 150 || father.length > 150 ||
         !validExamMarks(examCode, data) ||
         !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(+parsedDate) ||
         parsedDate.toISOString().slice(0, 10) !== date) {
@@ -65,13 +66,13 @@ export async function onRequest({ request, env }) {
       }
     }
     const sheetId = method === "POST" ? crypto.randomUUID() : id;
-    const values = [registration, student, first, second, third, date, certificateRef];
+    const values = [registration, student, father || null, first, second, third, date, certificateRef];
     const result = method === "POST"
       ? await env.DB.prepare(
-        "INSERT INTO marksheets (registration_no, student_name, first_terminal, second_terminal, third_terminal, issued_on, certificate_ref, id, created_by, exam_course) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO marksheets (registration_no, student_name, father_name, first_terminal, second_terminal, third_terminal, issued_on, certificate_ref, id, created_by, exam_course) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(...values, sheetId, account.id, examCode).run()
       : await env.DB.prepare(
-        "UPDATE marksheets SET registration_no = ?, student_name = ?, first_terminal = ?, second_terminal = ?, third_terminal = ?, issued_on = ?, certificate_ref = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        "UPDATE marksheets SET registration_no = ?, student_name = ?, father_name = ?, first_terminal = ?, second_terminal = ?, third_terminal = ?, issued_on = ?, certificate_ref = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
       ).bind(...values, id).run();
     return result.meta.changes ? json({ success: true, id: sheetId }, method === "POST" ? 201 : 200) : json({ error: "Mark sheet not found" }, 404);
   } catch (error) {
