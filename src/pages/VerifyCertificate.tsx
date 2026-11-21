@@ -4,7 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Search, Loader2 } from "lucide-react";
+import { ArrowLeft, Search, Loader2, FileText, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { createMarksheetPdf, type PrintableMarksheet } from "@/lib/marksheet-pdf";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +35,43 @@ const VerifyCertificate = () => {
   const [certificate, setCertificate] = useState<Certificate | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [marksheet, setMarksheet] = useState<PrintableMarksheet | null>(null);
+  const [preview, setPreview] = useState<"certificate" | "marksheet" | null>(null);
+  const [marksheetUrl, setMarksheetUrl] = useState<string | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+
+  useEffect(() => () => {
+    if (marksheetUrl) URL.revokeObjectURL(marksheetUrl);
+  }, [marksheetUrl]);
+
+  const closePreview = () => {
+    setPreview(null);
+    setMarksheetUrl(null);
+  };
+
+  const openMarksheet = async () => {
+    if (!marksheet) return;
+    setPreviewBusy(true);
+    try {
+      const pdf = await createMarksheetPdf(marksheet);
+      // Apply the watermark to the PDF itself, not merely the viewer overlay.
+      const width = pdf.internal.pageSize.getWidth();
+      const height = pdf.internal.pageSize.getHeight();
+      pdf.setTextColor(190, 190, 190);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(43);
+      pdf.text("ONLINE VERIFICATION", width / 2, height / 2, {
+        align: "center", angle: 35
+      });
+      const url = URL.createObjectURL(pdf.output("blob"));
+      setMarksheetUrl(url);
+      setPreview("marksheet");
+    } catch {
+      toast({ title: "Preview unavailable", description: "Could not prepare the marksheet.", variant: "destructive" });
+    } finally {
+      setPreviewBusy(false);
+    }
+  };
 
   // Auto-extract certificate ID from URL parameters and verify
   useEffect(() => {
@@ -56,6 +95,9 @@ const VerifyCertificate = () => {
 
     setIsLoading(true);
     setHasSearched(true);
+    setCertificate(null);
+    setMarksheet(null);
+    closePreview();
     
     try {
       const response = await fetch(
@@ -73,6 +115,7 @@ const VerifyCertificate = () => {
       if (error) {
         if (error.code === 'PGRST116') {
           setCertificate(null);
+          setMarksheet(null);
           toast({
             title: "Certificate Not Found",
             description: "No certificate found with the provided ID.",
@@ -83,6 +126,7 @@ const VerifyCertificate = () => {
         }
       } else {
         setCertificate(data);
+        setMarksheet(result.marksheet || null);
         toast({
           title: "Certificate Found",
           description: "Certificate has been successfully verified.",
@@ -238,13 +282,40 @@ const VerifyCertificate = () => {
                 </Card>
 
                 <Card className="bg-white/90 backdrop-blur-lg border-gray-200">
-                  <CardHeader>
-                    <CardTitle>Certificate Preview</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CertificatePreview data={convertToCertificateData(certificate)} />
+                  <CardContent className="flex flex-col sm:flex-row gap-3 pt-6">
+                    <Button className="flex-1" onClick={() => setPreview("certificate")}>
+                      <FileText className="mr-2 h-4 w-4" /> Preview Certificate
+                    </Button>
+                    <Button className="flex-1" variant="outline" disabled={!marksheet || previewBusy} onClick={openMarksheet}>
+                      {previewBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
+                      Preview Marksheet
+                    </Button>
+                    {!marksheet && <p className="text-sm text-gray-600 self-center">No marksheet linked to this certificate.</p>}
                   </CardContent>
                 </Card>
+                <Dialog open={preview !== null} onOpenChange={open => { if (!open) closePreview(); }}>
+                  <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] flex flex-col overflow-hidden">
+                    <DialogHeader>
+                      <DialogTitle>{preview === "certificate" ? "Certificate" : "Marksheet"} — Online Verification</DialogTitle>
+                    </DialogHeader>
+                    {preview === "certificate" ? (
+                      <div className="flex-1 overflow-auto bg-gray-100 relative verification-certificate">
+                        <div className="relative w-[210mm] h-[297mm] mx-auto">
+                          <CertificatePreview data={convertToCertificateData(certificate)} />
+                          <div aria-label="Online verification watermark" className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center overflow-hidden">
+                            <span className="text-gray-500/35 text-6xl font-bold whitespace-nowrap -rotate-45 select-none">ONLINE VERIFICATION</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : marksheetUrl ? (
+                      <iframe title="Verified marksheet preview" src={marksheetUrl} className="w-full flex-1 border-0" />
+                    ) : null}
+                  </DialogContent>
+                </Dialog>
+                <style>{`
+                  .verification-certificate #certificate-container { transform: none !important; }
+                  .verification-certificate .no-print { display: none !important; }
+                `}</style>
               </div>
             ) : (
               <Card className="bg-red-50/90 backdrop-blur-lg border-red-200">
