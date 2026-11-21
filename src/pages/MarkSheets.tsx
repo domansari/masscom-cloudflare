@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowDown, ArrowUp, ArrowUpDown, Download, Edit, FilePlus, Printer, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowDown, ArrowUp, ArrowUpDown, Download, Edit, FileBadge, FilePlus, Printer, Search, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -26,7 +26,7 @@ const sortColumns = [
 ] as const;
 type SortField = (typeof sortColumns)[number][0];
 const pageSize = 10;
-const actionStyle = "text-white shadow-lg transition-all duration-300 hover:scale-105";
+const actionStyle = "h-8 w-8 shrink-0 p-0 text-white shadow-lg transition-all duration-300 hover:scale-105";
 
 const emptyForm = { roll_no: "", batch_code: "", year: "", certificate_ref: "", student_name: "", issued_on: "", first_terminal: "", second_terminal: "" };
 const normalize = (value?: string) => (value ?? "").trim().toLowerCase();
@@ -73,6 +73,59 @@ function download(sheet: Sheet) {
   pdf.text(`Date of Issue: ${sheet.issued_on}`, 79, 245);
   pdf.text("Controller of Examination", 146, 245);
   pdf.save(`DCA-${sheet.registration_no.replace(/[^a-z0-9_-]/gi, "-")}.pdf`);
+}
+
+function printMarkSheet(sheet: Sheet) {
+  const printWindow = window.open("", "_blank", "popup,width=850,height=720");
+  if (!printWindow) return false;
+  const document = printWindow.document;
+  const score = result(sheet.first_terminal, sheet.second_terminal);
+  const appendText = (tag: string, text: string, parent: HTMLElement = document.body) => {
+    const element = document.createElement(tag);
+    element.textContent = text;
+    parent.append(element);
+    return element;
+  };
+
+  document.title = "Print Marksheet";
+  appendText("style", `
+    @page { size: A4; margin: 15mm; }
+    body { font: 15px system-ui, sans-serif; color: #111; border: 2px solid #333; padding: 24px; }
+    h1, h2 { text-align: center; margin: 0 0 12px; }
+    table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+    th, td { text-align: left; border: 1px solid #aaa; padding: 10px; }
+    footer { display: flex; justify-content: space-between; margin-top: 56px; }
+  `, document.head);
+  appendText("h1", "MASSCOM INFOTECH EDUCATION");
+  appendText("h2", "Statement of Marks");
+  appendText("p", `Registration No. ${sheet.registration_no}`);
+  appendText("p", `Student Name: ${sheet.student_name}`);
+  appendText("p", "Diploma in Computer Application · 8 months");
+
+  const table = document.createElement("table");
+  document.body.append(table);
+  const headings = table.createTHead().insertRow();
+  for (const heading of ["Terminal / Course Content", "Maximum Marks", "Marks Secured"]) {
+    appendText("th", heading, headings);
+  }
+  const body = table.createTBody();
+  for (const [key, label, modules] of terminals) {
+    const row = body.insertRow();
+    appendText("strong", label, row.insertCell());
+    appendText("div", modules, row.cells[0]);
+    row.insertCell().textContent = "100";
+    row.insertCell().textContent = String(sheet[key]);
+  }
+  appendText("p", `Total: ${score.total}/200 · Percentage: ${score.percentage}% · Result: ${score.pass ? "Pass" : "Fail"} · Grade: ${score.grade}`);
+  appendText("p", "Passing requirement: at least 33/100 in each terminal.");
+  const footer = appendText("footer", "");
+  appendText("span", "Prepared By", footer);
+  appendText("span", `Date of Issue: ${sheet.issued_on}`, footer);
+  appendText("span", "Controller of Examination", footer);
+  printWindow.addEventListener("afterprint", () => printWindow.close(), { once: true });
+  printWindow.focus();
+  printWindow.print();
+  return true;
 }
 
 async function request(method = "GET", id?: string, body?: object) {
@@ -285,7 +338,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
         <div className="mx-auto flex min-h-16 max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2 text-white sm:px-6 lg:px-8">
           <Link className="flex items-center gap-3 hover:text-gray-200" to="/"><ArrowLeft className="h-5 w-5" />Back to Home</Link>
           <h1 className="text-xl font-semibold">Manage Mark Sheets</h1>
-          <Button asChild size="sm" className={`bg-blue-600 hover:bg-blue-700 ${actionStyle}`}><Link to="/marksheets">Create Mark Sheet</Link></Button>
+          <Button asChild size="sm" className="bg-blue-600 text-white hover:bg-blue-700"><Link to="/marksheets">Create Mark Sheet</Link></Button>
         </div>
       </nav>
 
@@ -308,7 +361,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
                 <SelectTrigger aria-label="Sort by" className="w-44 border-white/30 bg-white/20 text-white"><SelectValue /></SelectTrigger>
                 <SelectContent>{sortColumns.map(([field, label]) => <SelectItem value={field} key={field}>{label}</SelectItem>)}</SelectContent>
               </Select>
-              <Button size="sm" onClick={() => { setAscending(!ascending); setPage(1); }} className={`bg-gradient-to-r from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 ${actionStyle}`}>
+              <Button size="sm" onClick={() => { setAscending(!ascending); setPage(1); }} className={`bg-gradient-to-r from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white`}>
                 {ascending ? "Ascending" : "Descending"}<ArrowUpDown className="ml-2 h-4 w-4" />
               </Button>
               {sortedSheets.length > 0 && <span>Showing {start + 1}–{Math.min(start + pageSize, sortedSheets.length)} of {sortedSheets.length} marksheets</span>}
@@ -340,11 +393,14 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
                       <TableCell className="whitespace-nowrap">{sheet.issued_on}</TableCell>
                       <TableCell>{sheet.first_terminal}/100</TableCell><TableCell>{sheet.second_terminal}/100</TableCell>
                       <TableCell className="whitespace-nowrap">{score.pass ? "Pass" : "Fail"} · {score.percentage}%</TableCell>
-                      <TableCell><div className="flex gap-2">
+                      <TableCell><div className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap">
                         <Button size="sm" aria-label="Edit Marksheet" title="Edit Marksheet" onClick={() => edit(sheet)} disabled={busy} className={`bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 ${actionStyle}`}><Edit className="h-4 w-4" /></Button>
+                        <Button size="sm" aria-label="Print Marksheet" title="Print Marksheet" className={`bg-emerald-700 hover:bg-emerald-800 ${actionStyle}`} onClick={() => {
+                          if (!printMarkSheet(sheet)) setNotice("Allow pop-ups for this site to print the marksheet.");
+                        }}><Printer className="h-4 w-4" /></Button>
                         <Button size="sm" aria-label="Download PDF" title="Download PDF" onClick={() => download(sheet)} className={`bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 ${actionStyle}`}><Download className="h-4 w-4" /></Button>
                         {sheet.certificate_ref ? <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
-                          <Link to={`/print/${encodeURIComponent(sheet.certificate_ref)}`} aria-label="View Certificate" title="View Certificate"><Printer className="h-4 w-4" /></Link>
+                          <Link to={`/print/${encodeURIComponent(sheet.certificate_ref)}`} aria-label="View Certificate" title="View Certificate"><FileBadge className="h-4 w-4" /></Link>
                         </Button> : score.pass && sheet.registration_no.split("/").length === 3 && <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
                           <Link to={`/generate?marksheet=${encodeURIComponent(sheet.id)}`} aria-label="Create Certificate" title="Create Certificate"><FilePlus className="h-4 w-4" /></Link>
                         </Button>}

@@ -115,23 +115,23 @@ export const CertificateTable: React.FC<CertificateTableProps> = ({
                 {new Date(certificate.completion_date).toLocaleDateString()}
               </TableCell>
               <TableCell>
-                <div className="flex flex-wrap gap-2">
+                <div className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap">
                   <Button
                     size="sm"
                     onClick={() => onEdit(certificate)}
-                    className="bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white shadow-lg transition-all duration-300 hover:scale-105"
+                    className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white shadow-lg transition-all duration-300 hover:scale-105"
                   >
                     <Edit className="h-4 w-4" />
                   </Button>
                   <Link to={`/print/${certificate.id}`}>
                     <Button 
                       size="sm" 
-                      className="bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 text-white shadow-lg transition-all duration-300 hover:scale-105"
+                      className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 text-white shadow-lg transition-all duration-300 hover:scale-105"
                     >
                       <Printer className="h-4 w-4" />
                     </Button>
                   </Link>
-                  <Button asChild size="sm" className="bg-gradient-to-r from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white shadow-lg transition-all duration-300 hover:scale-105">
+                  <Button asChild size="sm" className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white shadow-lg transition-all duration-300 hover:scale-105">
                     <Link to={`/marksheets/manage?certificate=${encodeURIComponent(certificate.id)}`} aria-label="View Marksheet" title="View Marksheet">
                       <Eye className="h-4 w-4" />
                     </Link>
@@ -139,7 +139,7 @@ export const CertificateTable: React.FC<CertificateTableProps> = ({
                   {onDelete && <Button
                     size="sm"
                     onClick={() => onDelete(certificate)}
-                    className="bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 text-white shadow-lg transition-all duration-300 hover:scale-105"
+                    className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 text-white shadow-lg transition-all duration-300 hover:scale-105"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>}
