@@ -32,10 +32,7 @@ const GenerateCertificate = () => {
     certificateId: "",
     rollNo: "",
   });
-  const [examMarks, setExamMarks] = useState<Record<string, string>>({});
-  const [examYear, setExamYear] = useState("");
   const examCode = examCourseCode(formData.courseName);
-  const examModules = examCode && !markSheetId ? examCourses[examCode].modules : [];
   const [batchNumber, setBatchNumber] = useState("");
   const [qrCodeData, setQrCodeData] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -52,11 +49,10 @@ const GenerateCertificate = () => {
       const registration = sheet?.registration_no.split("/");
       if (!sheet || sheet.certificate_ref || registration.length !== 3 ||
           !registration[0] || !registration[1] || !/^\d{4}$/.test(registration[2]) ||
-          !Number.isInteger(sheet.first_terminal) || sheet.first_terminal < 33 || sheet.first_terminal > 100 ||
-          !Number.isInteger(sheet.second_terminal) || sheet.second_terminal < 33 || sheet.second_terminal > 100) {
-        throw new Error("Choose an unlinked mark sheet with passing marks in both terminals.");
+          !validExamMarks(sheet.exam_course, sheet, passingMark)) {
+        throw new Error("Choose an unlinked mark sheet with passing marks in each required exam.");
       }
-      setFormData(current => ({ ...current, studentName: sheet.student_name, rollNo: registration[0], courseName: "Diploma in Computer Application" }));
+      setFormData(current => ({ ...current, studentName: sheet.student_name, rollNo: registration[0], courseName: examCourses[sheet.exam_course].name }));
       setBatchNumber(registration[1]);
       setReadySheetId(markSheetId);
     }).catch(error => {
@@ -134,13 +130,6 @@ const GenerateCertificate = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (markSheetId && (readySheetId !== markSheetId || linkedCertificateId)) return;
-    const marks = Object.fromEntries(examModules.map(([field]) => [
-      field, examMarks[field] ? Number(examMarks[field]) : undefined,
-    ]));
-    if (examModules.length && !validExamMarks(examCode, marks, passingMark)) {
-      toast({ title: "Exam requirements", description: "Each required exam must have between 33 and 100 marks.", variant: "destructive" });
-      return;
-    }
     setIsLoading(true);
 
     const certificateId = generateCertificateId();
@@ -190,8 +179,6 @@ const GenerateCertificate = () => {
           certificate_id: certificateId,
           batch_number: batchNumber,
           marksheet_id: markSheetId,
-          exam_marks: examModules.length ? marks : undefined,
-          exam_year: examYear,
           qr_code_data: qrCodeData
         })
       });
@@ -201,7 +188,7 @@ const GenerateCertificate = () => {
         throw new Error(result.error || "Failed to create certificate");
       }
 
-      if (markSheetId || examModules.length) {
+      if (markSheetId) {
         const saved = await response.json();
         setLinkedCertificateId(saved.id);
       }
@@ -292,7 +279,7 @@ const GenerateCertificate = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="courseName" className="text-white">Course Name</Label>
-                  <Select value={formData.courseName} disabled={!!markSheetId} onValueChange={(value) => { handleSelectChange('courseName', value); setExamMarks({}); }}>
+                  <Select value={formData.courseName} disabled={!!markSheetId} onValueChange={(value) => handleSelectChange('courseName', value)}>
                     <SelectTrigger className="bg-white/20 border-white/30 text-white">
                       <SelectValue placeholder="Select course" />
                     </SelectTrigger>
@@ -367,7 +354,6 @@ const GenerateCertificate = () => {
                     type="text"
                     id="rollNo"
                     readOnly={!!markSheetId}
-                    required={examModules.length > 0}
                     placeholder="Enter Roll Number"
                     value={formData.rollNo}
                     onChange={handleChange}
@@ -383,7 +369,6 @@ const GenerateCertificate = () => {
                     type="text"
                     id="batchNumber"
                     readOnly={!!markSheetId}
-                    required={examModules.length > 0}
                     placeholder="Enter batch number"
                     value={batchNumber}
                     onChange={(e) => setBatchNumber(e.target.value)}
@@ -402,23 +387,6 @@ const GenerateCertificate = () => {
                 </div>
               </div>
 
-              {examModules.length > 0 && (
-                <fieldset className="grid gap-4 rounded-lg border border-white/25 p-4 text-white sm:grid-cols-2">
-                  <legend className="px-2 font-semibold">Terminal Exams</legend>
-                  <label className="grid gap-1.5 sm:col-span-2">Registration year
-                    <Input required inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={examYear} onChange={event => setExamYear(event.target.value)} className="max-w-48 border-white/30 bg-white/20" />
-                  </label>
-                  {examModules.map(([field, label, modules]) => (
-                    <label key={field} className="grid content-start gap-1.5">
-                      <span>{label} · Max 100 · Passing 33</span>
-                      <Input required type="number" min={0} max={100} step={1} value={examMarks[field] ?? ""}
-                        onChange={event => setExamMarks(current => ({ ...current, [field]: event.target.value }))}
-                        className="border-white/30 bg-white/20" />
-                      <small>{modules}</small>
-                    </label>
-                  ))}
-                </fieldset>
-              )}
               {sheetError && <p role="alert" className="text-white">{sheetError}</p>}
               {linkedCertificateId && <div className="flex flex-wrap gap-2">
                 <Button asChild><Link to={`/print/${encodeURIComponent(linkedCertificateId)}`}>View / Print Certificate</Link></Button>

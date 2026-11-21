@@ -1,5 +1,5 @@
 
-import { examCourseCode, passingMark, validExamMarks } from "../_exam-courses.js";
+import { examCourseCode, examCourseNames, passingMark, validExamMarks } from "../_exam-courses.js";
 import { requireCertificateUser, sameOrigin } from "../_admin.js";
 
 export async function onRequestGet({ request, env }) {
@@ -142,38 +142,35 @@ export async function onRequestPost({ request, env }) {
 
     const markSheetId = data.marksheet_id;
     const examCode = examCourseCode(values.course_name);
-    const exam = data.exam_marks;
-    if (exam != null && (!examCode || markSheetId != null || !validExamMarks(examCode, exam, passingMark))) {
-      return Response.json({ error: "Enter between 33 and 100 marks in every required exam to issue a certificate." }, { status: 400 });
-    }
     if (markSheetId != null) {
       if (typeof markSheetId !== "string" || !/^[a-f0-9-]{36}$/.test(markSheetId)) {
         return Response.json({ error: "Invalid mark sheet ID" }, { status: 400 });
       }
       const sheet = await env.DB.prepare(
-        "SELECT registration_no, student_name FROM marksheets WHERE id = ? AND certificate_ref IS NULL AND exam_course = 'dca' AND first_terminal BETWEEN 33 AND 100 AND second_terminal BETWEEN 33 AND 100"
+        "SELECT registration_no, student_name, exam_course, first_terminal, second_terminal, third_terminal FROM marksheets WHERE id = ? AND certificate_ref IS NULL"
       ).bind(markSheetId).first();
       const parts = sheet?.registration_no.split("/");
       if (!sheet || parts.length !== 3 || !parts[0] || !parts[1] || !/^\d{4}$/.test(parts[2]) ||
           values.student_name !== sheet.student_name || values.roll_no !== parts[0] ||
-          values.batch_number !== parts[1] || values.course_name !== "Diploma in Computer Application") {
-        return Response.json({ error: "Use an unlinked DCA mark sheet with matching details and at least 33 marks in each terminal." }, { status: 409 });
+          values.batch_number !== parts[1] || examCode !== sheet.exam_course || !validExamMarks(examCode, sheet, passingMark)) {
+        return Response.json({ error: "Use an unlinked marksheet with matching student details and at least 33 marks in each required exam." }, { status: 409 });
       }
 
       // Recheck eligibility inside the transaction and link only the newly inserted certificate.
+      const courseNames = examCourseNames(examCode);
       const [created] = await env.DB.batch([
         env.DB.prepare(
           `INSERT INTO certificates (${columns.join(", ")})
            SELECT ${placeholders} FROM marksheets
            WHERE id = ? AND registration_no = ? AND student_name = ? AND certificate_ref IS NULL
-             AND exam_course = 'dca' AND first_terminal BETWEEN 33 AND 100 AND second_terminal BETWEEN 33 AND 100
+             AND exam_course = ? AND first_terminal = ? AND second_terminal = ? AND third_terminal IS ?
              AND NOT EXISTS (
                SELECT 1 FROM certificates WHERE lower(trim(roll_no)) = lower(?)
                  AND lower(trim(batch_number)) = lower(?) AND lower(trim(student_name)) = lower(?)
-                 AND lower(trim(course_name)) IN ('dca', 'diploma in computer application', 'diploma in computer applications')
+                 AND lower(trim(course_name)) IN (${courseNames.map(() => "?").join(", ")})
              )`
         ).bind(id, ...fields.map(field => values[field]), auth.id, markSheetId, sheet.registration_no, sheet.student_name,
-          parts[0], parts[1], sheet.student_name),
+          examCode, sheet.first_terminal, sheet.second_terminal, sheet.third_terminal, parts[0], parts[1], sheet.student_name, ...courseNames),
         env.DB.prepare(
           "UPDATE marksheets SET certificate_ref = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND EXISTS (SELECT 1 FROM certificates WHERE id = ?)"
         ).bind(id, markSheetId, id),
@@ -181,25 +178,6 @@ export async function onRequestPost({ request, env }) {
       return created.meta.changes
         ? Response.json({ success: true, id }, { status: 201 })
         : Response.json({ error: "A matching certificate already exists or the mark sheet changed. Refresh and link an existing certificate if available." }, { status: 409 });
-    }
-
-    if (exam != null) {
-      const parts = [values.roll_no, values.batch_number, typeof data.exam_year === "string" ? data.exam_year.trim() : ""];
-      const registration = parts.join("/");
-      if (!parts.every(part => part && !part.includes("/") && !/[\x00-\x1f]/.test(part)) ||
-          !/^\d{4}$/.test(parts[2]) || registration.length > 100 || values.student_name.length > 150) {
-        return Response.json({ error: "Enter a roll number, batch code and four-digit registration year for the marksheet." }, { status: 400 });
-      }
-      await env.DB.batch([
-        env.DB.prepare(
-          `INSERT INTO certificates (${columns.join(", ")}) VALUES (${placeholders})`
-        ).bind(id, ...fields.map(field => values[field]), auth.id),
-        env.DB.prepare(
-          "INSERT INTO marksheets (id, registration_no, student_name, issued_on, certificate_ref, created_by, exam_course, first_terminal, second_terminal, third_terminal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        ).bind(crypto.randomUUID(), registration, values.student_name, values.completion_date, id, auth.id,
-          examCode, exam.first_terminal, examCode === "cca" ? 0 : exam.second_terminal, examCode === "adca" ? exam.third_terminal : null),
-      ]);
-      return Response.json({ success: true, id }, { status: 201 });
     }
 
     await env.DB.prepare(

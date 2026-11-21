@@ -22,15 +22,22 @@ export const examCourses = {
 
 export const passingMark = 33;
 
+export function examCourseNames(code) {
+  if (!Object.hasOwn(examCourses, code)) return [];
+  const names = [examCourses[code].name.toLowerCase(), code];
+  if (code === "dca") names.push("diploma in computer applications");
+  if (code === "cca") names.push("computer accountancy tally & gst");
+  return names;
+}
+
 export function examCourseCode(name) {
   const normalized = String(name ?? "").trim().toLowerCase();
-  if (["dca", "diploma in computer applications"].includes(normalized)) return "dca";
-  if (["cca", "computer accountancy tally & gst"].includes(normalized)) return "cca";
-  return Object.keys(examCourses).find(code => examCourses[code].name.toLowerCase() === normalized);
+  return Object.keys(examCourses).find(code => examCourseNames(code).includes(normalized));
 }
 
 export function validExamMarks(code, marks, minimum = 0) {
-  return examCourses[code]?.modules.every(([field]) =>
+  if (!Object.hasOwn(examCourses, code)) return false;
+  return examCourses[code].modules.every(([field]) =>
     Number.isInteger(marks?.[field]) && marks[field] >= minimum && marks[field] <= 100
-  ) ?? false;
+  );
 }

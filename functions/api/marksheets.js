@@ -39,7 +39,7 @@ export async function onRequest({ request, env }) {
       ? await env.DB.prepare("SELECT exam_course FROM marksheets WHERE id = ?").bind(id).first()
       : null;
     if (method === "PUT" && !existing) return json({ error: "Mark sheet not found" }, 404);
-    const examCode = existing?.exam_course ?? "dca";
+    const examCode = existing?.exam_course ?? data?.exam_course ?? "dca";
     const first = data?.first_terminal;
     const second = examCode === "cca" ? 0 : data?.second_terminal;
     const third = examCode === "adca" ? data?.third_terminal : null;
@@ -68,8 +68,8 @@ export async function onRequest({ request, env }) {
     const values = [registration, student, first, second, third, date, certificateRef];
     const result = method === "POST"
       ? await env.DB.prepare(
-        "INSERT INTO marksheets (registration_no, student_name, first_terminal, second_terminal, third_terminal, issued_on, certificate_ref, id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      ).bind(...values, sheetId, account.id).run()
+        "INSERT INTO marksheets (registration_no, student_name, first_terminal, second_terminal, third_terminal, issued_on, certificate_ref, id, created_by, exam_course) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).bind(...values, sheetId, account.id, examCode).run()
       : await env.DB.prepare(
         "UPDATE marksheets SET registration_no = ?, student_name = ?, first_terminal = ?, second_terminal = ?, third_terminal = ?, issued_on = ?, certificate_ref = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
       ).bind(...values, id).run();

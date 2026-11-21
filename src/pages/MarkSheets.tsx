@@ -231,7 +231,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
     event.preventDefault();
     const createCertificate = (event.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "certificate";
     void change(editing ? "PUT" : "POST", editing, {
-      ...form, ...Object.fromEntries(terminals.map(([field]) => [field, Number(form[field])])),
+      ...form, exam_course: editingCourse, ...Object.fromEntries(terminals.map(([field]) => [field, Number(form[field])])),
     }, createCertificate);
   }
 
@@ -265,6 +265,17 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
     <>
         <p>Passing requires at least 33 out of 100 in each required exam.</p>
         <form className={`grid gap-4 sm:grid-cols-2 ${!showSaved ? "text-white [&_input]:border-white/30 [&_input]:bg-white/20 [&_input]:text-white [&_input[type=date]]:[color-scheme:dark]" : ""}`} onSubmit={save}>
+          <label className="sm:col-span-2">Course
+            <Select value={editingCourse} disabled={Boolean(editing)} onValueChange={(code: keyof typeof examCourses) => {
+              setEditingCourse(code);
+              setForm(current => ({ ...current, first_terminal: "", second_terminal: "", third_terminal: "", certificate_ref: "" }));
+            }}>
+              <SelectTrigger aria-label="Course" className={showSaved ? "" : "border-white/30 bg-white/20 text-white"}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(examCourses).map(([code, course]) => <SelectItem key={code} value={code}>{course.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </label>
           <label>Roll No.<Input required maxLength={46} pattern="[^/]+" value={form.roll_no} onChange={e => setForm({ ...form, roll_no: e.target.value, certificate_ref: "" })} /></label>
           <label>Batch Code<Input required maxLength={46} pattern="[^/]+" value={form.batch_code} onChange={e => setForm({ ...form, batch_code: e.target.value, certificate_ref: "" })} /></label>
           <label>Year<Input required inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={form.year} onChange={e => setForm({ ...form, year: e.target.value })} /></label>
@@ -278,12 +289,12 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
           </label>
           <label>Date of issue<Input required type="date" value={form.issued_on} onChange={e => setForm({ ...form, issued_on: e.target.value })} /></label>
           {terminals.map(([field, label, modules]) => (
-            <label key={field}>{label} (out of 100)<Input required type="number" min={0} max={100} step={1} value={form[field]} onChange={e => setForm({ ...form, [field]: e.target.value })} /><small>{modules}</small></label>
+            <label key={field}>{label} · Max 100 · Passing {passingMark}<Input required type="number" min={0} max={100} step={1} value={form[field]} onChange={e => setForm({ ...form, [field]: e.target.value })} /><small>{modules}</small></label>
           ))}
           {preview && <p className="sm:col-span-2">{preview.total}/{preview.maximum} · {preview.percentage}% · {preview.pass ? "Pass" : "Fail"} · Grade {preview.grade}</p>}
           <div className="flex flex-wrap gap-2 sm:col-span-2">
             <Button type="submit" disabled={busy} className={showSaved ? undefined : "bg-blue-600 text-white hover:bg-blue-700"}>{editing ? "Save changes" : "Create mark sheet"}</Button>
-            {editingCourse === "dca" && !certificateId && !form.certificate_ref && <Button type="submit" value="certificate" variant="outline" className={showSaved ? undefined : "border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"} disabled={busy || !preview?.pass || matchingCertificates.length > 0}>Save &amp; Create Certificate</Button>}
+            {!certificateId && !form.certificate_ref && <Button type="submit" value="certificate" variant="outline" className={showSaved ? undefined : "border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"} disabled={busy || !preview?.pass || matchingCertificates.length > 0}>Save &amp; Create Certificate</Button>}
             {editing && <Button type="button" variant="outline" onClick={reset}>Cancel edit</Button>}
           </div>
         </form>
@@ -307,7 +318,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
           <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
             <CardHeader>
               <CardTitle>Create Marksheet</CardTitle>
-              <CardDescription className="text-gray-200">Enter the student details and both DCA terminal marks.</CardDescription>
+              <CardDescription className="text-gray-200">Select a course and enter the student details and exam marks.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {formContent}
@@ -424,7 +435,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
                         <Button size="sm" aria-label="Download PDF" title="Download PDF" onClick={() => download(sheet)} className={`bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 ${actionStyle}`}><Download className="h-4 w-4" /></Button>
                         {sheet.certificate_ref ? <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
                           <Link to={`/print/${encodeURIComponent(sheet.certificate_ref)}`} aria-label="View Certificate" title="View Certificate"><FileBadge className="h-4 w-4" /></Link>
-                        </Button> : sheet.exam_course === "dca" && score.pass && sheet.registration_no.split("/").length === 3 && <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
+                        </Button> : score.pass && sheet.registration_no.split("/").length === 3 && <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
                           <Link to={`/generate?marksheet=${encodeURIComponent(sheet.id)}`} aria-label="Create Certificate" title="Create Certificate"><FilePlus className="h-4 w-4" /></Link>
                         </Button>}
                         {isAdmin() && <Button size="sm" disabled={busy} aria-label="Delete Marksheet" title="Delete Marksheet" className={`bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 ${actionStyle}`} onClick={() => {
