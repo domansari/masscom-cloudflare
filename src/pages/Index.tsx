@@ -1,9 +1,39 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, Search, Plus, Settings, Shield, Cpu, Database } from "lucide-react";
+import { useEffect, useState } from "react";
+import { FileText, Search, Plus, Settings, Shield, Cpu, Database, Clock } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import CertificatePortalIntro from "@/components/CertificatePortalIntro";
+
+const clockFormat = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+});
+
+function DashboardClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <Card className="bg-white/10 backdrop-blur-lg border-white/20">
+      <CardHeader className="text-center">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-indigo-700 shadow-lg">
+          <Clock className="h-8 w-8 text-white" aria-hidden="true" />
+        </div>
+        <CardTitle className="text-xl text-white">Digital Clock</CardTitle>
+        <CardDescription className="text-gray-300">India Standard Time</CardDescription>
+      </CardHeader>
+      <CardContent className="text-center">
+        <time className="font-mono text-3xl font-semibold tabular-nums text-white" dateTime={now.toISOString()}>
+          {clockFormat.format(now)}
+        </time>
+      </CardContent>
+    </Card>
+  );
+}
 
 const Index = () => {
   const { profile } = useAuth();
@@ -19,7 +49,7 @@ const Index = () => {
           <CertificatePortalIntro />
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
+        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
               <Card className="hover:shadow-xl transition-all duration-300 cursor-pointer bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
                 <Link to="/generate">
                   <CardHeader className="text-center">
@@ -63,17 +93,34 @@ const Index = () => {
               <div className="mx-auto w-16 h-16 bg-gradient-to-br from-cyan-500 to-cyan-700 rounded-full flex items-center justify-center mb-4 shadow-lg">
                 <Database className="h-8 w-8 text-white" />
               </div>
-              <CardTitle className="text-xl text-white">Mark Sheets</CardTitle>
+              <CardTitle className="text-xl text-white">Create Mark Sheet</CardTitle>
               <CardDescription className="text-gray-300">
-                Enter DCA terminal marks, manage mark sheets, and create certificates for students who pass.
+                Enter DCA terminal marks and create a new mark sheet.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Button asChild className="w-full bg-gradient-to-r from-cyan-600 to-cyan-800 hover:from-cyan-700 hover:to-cyan-900" size="lg">
-                <Link to="/marksheets">Create / Manage Mark Sheets</Link>
+                <Link to="/marksheets">Create Mark Sheet</Link>
               </Button>
             </CardContent>
           </Card>
+
+          <Card className="hover:shadow-xl transition-all duration-300 bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-teal-700 shadow-lg">
+                <FileText className="h-8 w-8 text-white" aria-hidden="true" />
+              </div>
+              <CardTitle className="text-xl text-white">Manage Mark Sheets</CardTitle>
+              <CardDescription className="text-gray-300">Find, edit, and download saved mark sheets.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild className="w-full bg-teal-700 hover:bg-teal-800" size="lg">
+                <Link to="/marksheets/manage">Manage Mark Sheets</Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <DashboardClock />
 
           <Card className="hover:shadow-xl transition-all duration-300 cursor-pointer bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
             <Link to="/verify">

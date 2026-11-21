@@ -387,7 +387,7 @@ const GenerateCertificate = () => {
               {sheetError && <p role="alert" className="text-white">{sheetError}</p>}
               {linkedCertificateId && <div className="flex flex-wrap gap-2">
                 <Button asChild><Link to={`/print/${encodeURIComponent(linkedCertificateId)}`}>View / Print Certificate</Link></Button>
-                <Button asChild variant="outline"><Link to={`/marksheets?certificate=${encodeURIComponent(linkedCertificateId)}#saved-mark-sheets`}>View Marksheet</Link></Button>
+                <Button asChild variant="outline"><Link to={`/marksheets/manage?certificate=${encodeURIComponent(linkedCertificateId)}`}>View Marksheet</Link></Button>
               </div>}
               <Button
                 type="submit"

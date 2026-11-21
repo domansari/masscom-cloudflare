@@ -69,11 +69,18 @@ async function request(method = "GET", id?: string, body?: object) {
   return data;
 }
 
-export default function MarkSheets() {
-  const { isAdmin } = useAuth();
-  const navigate = useNavigate();
+export default function MarkSheets({ manage = false }: { manage?: boolean }) {
   const [params] = useSearchParams();
   const certificateId = params.get("certificate");
+  return <MarkSheetWorkspace key={certificateId ?? (manage ? "manage" : "create")} manage={manage} certificateId={certificateId} />;
+}
+
+function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certificateId: string | null }) {
+  const { isAdmin } = useAuth();
+  const navigate = useNavigate();
+  const showSaved = manage || Boolean(certificateId);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
   const [sheets, setSheets] = useState<Sheet[]>([]);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [form, setForm] = useState(emptyForm);
@@ -86,8 +93,9 @@ export default function MarkSheets() {
   }
 
   useEffect(() => {
-    refresh().catch((error: Error) => setNotice(error.message));
-  }, []);
+    if (!showSaved) return;
+    refresh().catch((error: Error) => setNotice(error.message)).finally(() => setLoading(false));
+  }, [showSaved]);
 
   useEffect(() => {
     let active = true;
@@ -132,7 +140,7 @@ export default function MarkSheets() {
         return;
       }
       if (method !== "DELETE" || id === editing) reset();
-      await refresh();
+      if (showSaved) await refresh();
       setNotice(method === "DELETE" ? "Mark sheet deleted." : "Mark sheet saved.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Unable to complete the request.");
@@ -159,13 +167,19 @@ export default function MarkSheets() {
     normalize(certificate.roll_no) === normalize(form.roll_no) &&
     normalize(certificate.batch_number) === normalize(form.batch_code) &&
     normalize(certificate.student_name) === normalize(form.student_name));
-  const visibleSheets = certificateId ? sheets.filter(sheet => sheet.certificate_ref === certificateId) : sheets;
+  const visibleSheets = sheets.filter(sheet => certificateId
+    ? sheet.certificate_ref === certificateId
+    : normalize(`${sheet.student_name} ${sheet.registration_no}`).includes(normalize(search)));
+  const showForm = !showSaved || Boolean(editing) || Boolean(certificateId && !loading && visibleSheets.length === 0);
 
   return (
     <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8">
-      <Link className="-order-2 text-white underline" to="/">Certificate portal</Link>
-      <section className="space-y-4 rounded-lg bg-white p-5">
-        <h1 className="text-2xl font-bold">DCA Mark Sheets</h1>
+      <div className="-order-2 flex flex-wrap gap-4 text-white">
+        <Link className="underline" to="/">Certificate portal</Link>
+        <Link className="underline" to={showSaved ? "/marksheets" : "/marksheets/manage"}>{showSaved ? "Create Mark Sheet" : "Manage Mark Sheets"}</Link>
+      </div>
+      {showForm && <section id="marksheet-form" className="space-y-4 rounded-lg bg-white p-5">
+        <h1 className="text-2xl font-bold">{editing ? "Edit DCA Mark Sheet" : "Create DCA Mark Sheet"}</h1>
         <p>Passing requires at least 33 out of 100 in each terminal.</p>
         <form className="grid gap-4 sm:grid-cols-2" onSubmit={save}>
           <label>Roll No.<Input required maxLength={46} pattern="[^/]+" value={form.roll_no} onChange={e => setForm({ ...form, roll_no: e.target.value, certificate_ref: "" })} /></label>
@@ -191,12 +205,16 @@ export default function MarkSheets() {
             {editing && <Button type="button" variant="outline" onClick={reset}>Cancel edit</Button>}
           </div>
         </form>
-        <p role="status">{notice}</p>
-      </section>
-      <section id="saved-mark-sheets" className={`space-y-4 rounded-lg bg-white p-5 ${certificateId ? "-order-1" : ""}`}>
-        <h2 className="text-xl font-semibold">Saved mark sheets</h2>
-        {certificateId && <Link className="underline" to="/marksheets">Show all mark sheets</Link>}
-        {visibleSheets.length === 0 && <p>No mark sheets to display.</p>}
+      </section>}
+      {notice && <p className="rounded-lg bg-white p-3" role="status">{notice}</p>}
+      {showSaved && <section id="saved-mark-sheets" className={`space-y-4 rounded-lg bg-white p-5 ${certificateId ? "-order-1" : ""}`}>
+        <h1 className="text-2xl font-bold">Saved Mark Sheets</h1>
+        {certificateId ? <Link className="underline" to="/marksheets/manage">Show all mark sheets</Link> : (
+          <label className="block max-w-md">Search saved mark sheets
+            <Input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Student name or registration number" />
+          </label>
+        )}
+        {loading ? <p role="status">Loading mark sheets…</p> : visibleSheets.length === 0 && <p>No mark sheets to display.</p>}
         {visibleSheets.map(sheet => {
           const score = result(sheet.first_terminal, sheet.second_terminal);
           return <article key={sheet.id} className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
@@ -206,7 +224,10 @@ export default function MarkSheets() {
             <div className="flex flex-wrap gap-2">
               {sheet.certificate_ref && <Button asChild variant="outline"><Link to={`/print/${encodeURIComponent(sheet.certificate_ref)}`}>View certificate</Link></Button>}
               {!sheet.certificate_ref && score.pass && sheet.registration_no.split("/").length === 3 && <Button asChild variant="outline"><Link to={`/generate?marksheet=${encodeURIComponent(sheet.id)}`}>Create Certificate</Link></Button>}
-              <Button variant="outline" onClick={() => edit(sheet)} disabled={busy}>Edit</Button>
+              <Button variant="outline" onClick={() => {
+                edit(sheet);
+                requestAnimationFrame(() => document.getElementById("marksheet-form")?.scrollIntoView());
+              }} disabled={busy}>Edit</Button>
               <Button variant="outline" onClick={() => download(sheet)}>Download PDF</Button>
               {isAdmin() && <Button variant="destructive" disabled={busy} onClick={() => {
                 if (window.confirm(`Delete the mark sheet for ${sheet.registration_no}?`)) void change("DELETE", sheet.id);
@@ -214,7 +235,7 @@ export default function MarkSheets() {
             </div>
           </article>;
         })}
-      </section>
+      </section>}
     </main>
   );
 }

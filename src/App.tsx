@@ -41,6 +41,7 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/verify" element={<VerifyCertificate />} />
               <Route path="/marksheets" element={<ProtectedRoute><MarkSheets /></ProtectedRoute>} />
+              <Route path="/marksheets/manage" element={<ProtectedRoute><MarkSheets manage /></ProtectedRoute>} />
               <Route 
                 path="/" 
                 element={

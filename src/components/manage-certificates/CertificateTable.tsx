@@ -133,7 +133,7 @@ export const CertificateTable: React.FC<CertificateTableProps> = ({
                   </Link>
                   {["dca", "diploma in computer application", "diploma in computer applications"].includes(certificate.course_name.trim().toLowerCase()) && (
                     <Button asChild size="sm" variant="outline">
-                      <Link to={`/marksheets?certificate=${encodeURIComponent(certificate.id)}`}>View Marksheet</Link>
+                      <Link to={`/marksheets/manage?certificate=${encodeURIComponent(certificate.id)}`}>View Marksheet</Link>
                     </Button>
                   )}
                   {onDelete && <Button
