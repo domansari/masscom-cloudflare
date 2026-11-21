@@ -1,3 +1,4 @@
+import ExcelBackup from "@/components/ExcelBackup";
 import { Button } from "@/components/ui/button";
 
 import React, { useState } from "react";
@@ -303,6 +304,7 @@ const ManageCertificates = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {canDelete && <ExcelBackup type="certificates" />}
             <CertificateFilters
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}

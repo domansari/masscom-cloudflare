@@ -6,7 +6,7 @@ const json = (data, status = 200) => Response.json(data, {
   status, headers: { "Cache-Control": "no-store" }
 });
 
-export async function onRequest({ request, env }) {
+export async function onRequest({ request, env, allowLegacyRegistration = false }) {
   try {
     const method = request.method;
     if (!["GET", "POST", "PUT", "DELETE"].includes(method)) return json({ error: "Method not allowed" }, 405);
@@ -34,7 +34,8 @@ export async function onRequest({ request, env }) {
     const data = JSON.parse(raw);
     const parts = [data?.roll_no, data?.batch_code, data?.year].map(value => typeof value === "string" ? value.trim() : "");
     const [roll, batch, year] = parts;
-    const registration = parts.join("/");
+    const legacyRegistration = allowLegacyRegistration && typeof data?.registration_no === "string" ? data.registration_no.trim() : "";
+    const registration = legacyRegistration || parts.join("/");
     const certificateRef = data?.certificate_ref || null;
     const student = typeof data?.student_name === "string" ? data.student_name.trim() : "";
     const date = data?.issued_on;
@@ -47,7 +48,8 @@ export async function onRequest({ request, env }) {
     const first = data?.first_terminal;
 
     const parsedDate = typeof date === "string" ? new Date(date) : new Date(NaN);
-    if (!roll || !batch || !/^\d{4}$/.test(year) || !parts.every(part => /^[^/\x00-\x1f]+$/.test(part)) ||
+    if ((!legacyRegistration && (!roll || !batch || !/^\d{4}$/.test(year) || !parts.every(part => /^[^/\x00-\x1f]+$/.test(part)))) ||
+        /[\x00-\x1f]/.test(registration) ||
         registration.length > 100 || !student || student.length > 150 || father.length > 150 ||
         !validExamMarks(examCode, data) ||
         !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(+parsedDate) ||

@@ -1,3 +1,4 @@
+import ExcelBackup from "@/components/ExcelBackup";
 import { DeleteCertificateDialog } from "@/components/manage-certificates/DeleteCertificateDialog";
 import { examCourseCode, examCourses, examResult, marksheetResult, passingMark } from "../../functions/api/_exam-courses.js";
 import { ArrowLeft, ArrowDown, ArrowUp, ArrowUpDown, Download, Edit, FileBadge, FilePlus, Printer, Search, Trash2 } from "lucide-react";
@@ -398,6 +399,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
             <CardDescription className="text-gray-200">Find, edit and download marksheets.</CardDescription>
           </CardHeader>
           <CardContent>
+            {isAdmin() && <ExcelBackup type="marksheets" onImported={refresh} />}
             <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" aria-hidden="true" />
               <Input type="search" aria-label="Search saved mark sheets" placeholder="Search by student name or registration number..." value={search}
