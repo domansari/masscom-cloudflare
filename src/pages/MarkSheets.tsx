@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { jsPDF } from "jspdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,8 +9,10 @@ const terminals = [
   ["first_terminal", "1st Terminal", "Computer Fundamentals, MS-DOS, MS-Windows 7"],
   ["second_terminal", "2nd Terminal", "MS Word, MS Excel, MS Access, MS PowerPoint, Internet"],
 ] as const;
-type Sheet = { id: string; registration_no: string; student_name: string; issued_on: string; first_terminal: number; second_terminal: number };
-const emptyForm = { registration_no: "", student_name: "", issued_on: "", first_terminal: "", second_terminal: "" };
+type Sheet = { id: string; registration_no: string; student_name: string; issued_on: string; first_terminal: number; second_terminal: number; certificate_ref: string | null };
+type Certificate = { id: string; certificate_id: string; student_name: string; roll_no?: string; batch_number?: string; course_name: string };
+const emptyForm = { roll_no: "", batch_code: "", year: "", certificate_ref: "", student_name: "", issued_on: "", first_terminal: "", second_terminal: "" };
+const normalize = (value?: string) => (value ?? "").trim().toLowerCase();
 
 function result(first: number, second: number) {
   const total = first + second;
@@ -69,7 +71,10 @@ async function request(method = "GET", id?: string, body?: object) {
 
 export default function MarkSheets() {
   const { isAdmin } = useAuth();
+  const [params] = useSearchParams();
+  const certificateId = params.get("certificate");
   const [sheets, setSheets] = useState<Sheet[]>([]);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -83,14 +88,38 @@ export default function MarkSheets() {
     refresh().catch((error: Error) => setNotice(error.message));
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    fetch("/api/certificates").then(async response => {
+      if (!response.ok) throw new Error("Could not load certificates for linking.");
+      const { data } = await response.json() as { data: Certificate[] };
+      if (!active) return;
+      const dca = data.filter(certificate => ["dca", "diploma in computer application", "diploma in computer applications"].includes(normalize(certificate.course_name)));
+      setCertificates(dca);
+      const selected = dca.find(certificate => certificate.id === certificateId);
+      if (selected?.roll_no && selected.batch_number) {
+        setForm({ ...emptyForm, roll_no: selected.roll_no, batch_code: selected.batch_number, student_name: selected.student_name, certificate_ref: selected.id });
+      }
+    }).catch((error: Error) => { if (active) setNotice(error.message); });
+    return () => { active = false; };
+  }, [certificateId]);
+
   function edit(sheet: Sheet) {
+    const [roll_no = "", batch_code = "", year = ""] = sheet.registration_no.split("/");
     setEditing(sheet.id);
-    setForm({ ...sheet, first_terminal: String(sheet.first_terminal), second_terminal: String(sheet.second_terminal) });
+    setForm({
+      ...emptyForm, roll_no, batch_code, year, certificate_ref: sheet.certificate_ref ?? "",
+      student_name: sheet.student_name, issued_on: sheet.issued_on,
+      first_terminal: String(sheet.first_terminal), second_terminal: String(sheet.second_terminal),
+    });
   }
 
   function reset() {
     setEditing(undefined);
-    setForm(emptyForm);
+    const selected = certificates.find(certificate => certificate.id === certificateId);
+    setForm(selected?.roll_no && selected.batch_number
+      ? { ...emptyForm, roll_no: selected.roll_no, batch_code: selected.batch_number, student_name: selected.student_name, certificate_ref: selected.id }
+      : emptyForm);
   }
 
   async function change(method: string, id?: string, values?: object) {
@@ -109,6 +138,10 @@ export default function MarkSheets() {
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (certificateId && form.certificate_ref !== certificateId) {
+      setNotice("Select this certificate before saving its mark sheet.");
+      return;
+    }
     void change(editing ? "PUT" : "POST", editing, {
       ...form, first_terminal: Number(form.first_terminal), second_terminal: Number(form.second_terminal),
     });
@@ -116,6 +149,11 @@ export default function MarkSheets() {
 
   const preview = form.first_terminal !== "" && form.second_terminal !== ""
     ? result(Number(form.first_terminal), Number(form.second_terminal)) : null;
+  const matchingCertificates = certificates.filter(certificate => form.roll_no.trim() && form.batch_code.trim() &&
+    normalize(certificate.roll_no) === normalize(form.roll_no) &&
+    normalize(certificate.batch_number) === normalize(form.batch_code) &&
+    normalize(certificate.student_name) === normalize(form.student_name));
+  const visibleSheets = certificateId ? sheets.filter(sheet => sheet.certificate_ref === certificateId) : sheets;
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-8">
@@ -124,8 +162,18 @@ export default function MarkSheets() {
         <h1 className="text-2xl font-bold">DCA Mark Sheets</h1>
         <p>Passing requires at least 33 out of 100 in each terminal.</p>
         <form className="grid gap-4 sm:grid-cols-2" onSubmit={save}>
-          <label>Registration No.<Input required maxLength={100} value={form.registration_no} onChange={e => setForm({ ...form, registration_no: e.target.value })} /></label>
-          <label>Student name<Input required maxLength={150} value={form.student_name} onChange={e => setForm({ ...form, student_name: e.target.value })} /></label>
+          <label>Roll No.<Input required maxLength={46} pattern="[^/]+" value={form.roll_no} onChange={e => setForm({ ...form, roll_no: e.target.value, certificate_ref: "" })} /></label>
+          <label>Batch Code<Input required maxLength={46} pattern="[^/]+" value={form.batch_code} onChange={e => setForm({ ...form, batch_code: e.target.value, certificate_ref: "" })} /></label>
+          <label>Year<Input required inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={form.year} onChange={e => setForm({ ...form, year: e.target.value })} /></label>
+          <label>Student name<Input required maxLength={150} value={form.student_name} onChange={e => setForm({ ...form, student_name: e.target.value, certificate_ref: "" })} /></label>
+          <p className="sm:col-span-2">Registration No. {form.roll_no || "Roll No."}/{form.batch_code || "Batch Code"}/{form.year || "Year"}</p>
+          {certificateId && matchingCertificates.length === 0 && <p className="sm:col-span-2">The certificate must have a matching roll number, batch code, and student name before it can be linked.</p>}
+          <label>Link to certificate
+            <select className="block w-full rounded-md border bg-white p-2" value={form.certificate_ref} onChange={e => setForm({ ...form, certificate_ref: e.target.value })}>
+              <option value="">No certificate linked</option>
+              {matchingCertificates.map(certificate => <option key={certificate.id} value={certificate.id}>{certificate.certificate_id}</option>)}
+            </select>
+          </label>
           <label>Date of issue<Input required type="date" value={form.issued_on} onChange={e => setForm({ ...form, issued_on: e.target.value })} /></label>
           {terminals.map(([field, label, modules]) => (
             <label key={field}>{label} (out of 100)<Input required type="number" min={0} max={100} step={1} value={form[field]} onChange={e => setForm({ ...form, [field]: e.target.value })} /><small>{modules}</small></label>
@@ -140,12 +188,14 @@ export default function MarkSheets() {
       </section>
       <section className="space-y-4 rounded-lg bg-white p-5">
         <h2 className="text-xl font-semibold">Saved mark sheets</h2>
-        {sheets.length === 0 && <p>No mark sheets to display.</p>}
-        {sheets.map(sheet => {
+        {certificateId && <Link className="underline" to="/marksheets">Show all mark sheets</Link>}
+        {visibleSheets.length === 0 && <p>No mark sheets to display.</p>}
+        {visibleSheets.map(sheet => {
           const score = result(sheet.first_terminal, sheet.second_terminal);
           return <article key={sheet.id} className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
             <div><strong>{sheet.student_name}</strong><p>{sheet.registration_no} · {score.total}/200 · {score.percentage}% · {score.pass ? "Pass" : "Fail"}</p></div>
             <div className="flex flex-wrap gap-2">
+              {sheet.certificate_ref && <Button asChild variant="outline"><Link to={`/print/${encodeURIComponent(sheet.certificate_ref)}`}>View certificate</Link></Button>}
               <Button variant="outline" onClick={() => edit(sheet)} disabled={busy}>Edit</Button>
               <Button variant="outline" onClick={() => download(sheet)}>Download PDF</Button>
               {isAdmin() && <Button variant="destructive" disabled={busy} onClick={() => {
