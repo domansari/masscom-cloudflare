@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CertificatePagination } from "@/components/manage-certificates/CertificatePagination";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { createMarksheetPdf, type PrintableMarksheet } from "@/lib/marksheet-pdf";
+import { createMarksheetPdf, downloadMarksheetBatch, type PrintableMarksheet } from "@/lib/marksheet-pdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
@@ -71,6 +71,28 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [notice, setNotice] = useState("");
+  const [selectedBatch, setSelectedBatch] = useState("");
+  const [batchDownloading, setBatchDownloading] = useState(false);
+
+  const batchCode = (sheet: Sheet) => sheet.registration_no.split("/")[1]?.trim() || "";
+  const batchCodes = Array.from(new Set(sheets.map(batchCode).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const batchCount = sheets.filter(sheet => batchCode(sheet) === selectedBatch).length;
+
+  async function downloadBatch() {
+    if (!selectedBatch || batchDownloading) return;
+    setBatchDownloading(true);
+    setNotice("");
+    try {
+      const selected = sheets.filter(sheet => batchCode(sheet) === selectedBatch)
+        .sort((a, b) => a.registration_no.localeCompare(b.registration_no, undefined, { numeric: true }));
+      await downloadMarksheetBatch(selected, selectedBatch);
+      setNotice("Downloaded " + selected.length + " marksheets in one PDF.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Batch PDF download failed.");
+    } finally {
+      setBatchDownloading(false);
+    }
+  }
 
   async function outputMarksheet(sheet: Sheet, print = false) {
     setNotice("");
@@ -335,6 +357,16 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
           </CardHeader>
           <CardContent>
             {isAdmin() && <ExcelBackup type="marksheets" onImported={refresh} />}
+            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-md bg-white/90 p-3 text-gray-900">
+              <span className="font-medium">Download Marksheets by Batch</span>
+              <Select value={selectedBatch} onValueChange={setSelectedBatch}>
+                <SelectTrigger className="w-52"><SelectValue placeholder="Select Batch Code" /></SelectTrigger>
+                <SelectContent>{batchCodes.map(batch => <SelectItem key={batch} value={batch}>{batch}</SelectItem>)}</SelectContent>
+              </Select>
+              <Button disabled={!selectedBatch || batchDownloading} onClick={() => void downloadBatch()}>
+                <Download className="mr-2 h-4 w-4" />{batchDownloading ? "Preparing PDF..." : "Download Batch PDF" + (selectedBatch ? " (" + batchCount + ")" : "")}
+              </Button>
+            </div>
             <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" aria-hidden="true" />
               <Input type="search" aria-label="Search saved mark sheets" placeholder="Search by student name or registration number..." value={search}
