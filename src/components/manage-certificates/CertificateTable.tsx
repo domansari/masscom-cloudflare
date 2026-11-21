@@ -115,7 +115,7 @@ export const CertificateTable: React.FC<CertificateTableProps> = ({
                 {new Date(certificate.completion_date).toLocaleDateString()}
               </TableCell>
               <TableCell>
-                <div className="flex space-x-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
                     onClick={() => onEdit(certificate)}
@@ -131,6 +131,11 @@ export const CertificateTable: React.FC<CertificateTableProps> = ({
                       <Printer className="h-4 w-4" />
                     </Button>
                   </Link>
+                  {["dca", "diploma in computer application", "diploma in computer applications"].includes(certificate.course_name.trim().toLowerCase()) && (
+                    <Button asChild size="sm" variant="outline">
+                      <Link to={`/marksheets?certificate=${encodeURIComponent(certificate.id)}`}>View Marksheet</Link>
+                    </Button>
+                  )}
                   {onDelete && <Button
                     size="sm"
                     onClick={() => onDelete(certificate)}

@@ -139,6 +139,44 @@ export async function onRequestPost({ request, env }) {
     const columns = ["id", ...fields, "created_by"];
     const placeholders = columns.map(() => "?").join(", ");
 
+    const markSheetId = data.marksheet_id;
+    if (markSheetId != null) {
+      if (typeof markSheetId !== "string" || !/^[a-f0-9-]{36}$/.test(markSheetId)) {
+        return Response.json({ error: "Invalid mark sheet ID" }, { status: 400 });
+      }
+      const sheet = await env.DB.prepare(
+        "SELECT registration_no, student_name FROM marksheets WHERE id = ? AND certificate_ref IS NULL AND first_terminal BETWEEN 33 AND 100 AND second_terminal BETWEEN 33 AND 100"
+      ).bind(markSheetId).first();
+      const parts = sheet?.registration_no.split("/");
+      if (!sheet || parts.length !== 3 || !parts[0] || !parts[1] || !/^\d{4}$/.test(parts[2]) ||
+          values.student_name !== sheet.student_name || values.roll_no !== parts[0] ||
+          values.batch_number !== parts[1] || values.course_name !== "Diploma in Computer Application") {
+        return Response.json({ error: "Use an unlinked DCA mark sheet with matching details and at least 33 marks in each terminal." }, { status: 409 });
+      }
+
+      // Recheck eligibility inside the transaction and link only the newly inserted certificate.
+      const [created] = await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO certificates (${columns.join(", ")})
+           SELECT ${placeholders} FROM marksheets
+           WHERE id = ? AND registration_no = ? AND student_name = ? AND certificate_ref IS NULL
+             AND first_terminal BETWEEN 33 AND 100 AND second_terminal BETWEEN 33 AND 100
+             AND NOT EXISTS (
+               SELECT 1 FROM certificates WHERE lower(trim(roll_no)) = lower(?)
+                 AND lower(trim(batch_number)) = lower(?) AND lower(trim(student_name)) = lower(?)
+                 AND lower(trim(course_name)) IN ('dca', 'diploma in computer application', 'diploma in computer applications')
+             )`
+        ).bind(id, ...fields.map(field => values[field]), auth.id, markSheetId, sheet.registration_no, sheet.student_name,
+          parts[0], parts[1], sheet.student_name),
+        env.DB.prepare(
+          "UPDATE marksheets SET certificate_ref = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND EXISTS (SELECT 1 FROM certificates WHERE id = ?)"
+        ).bind(id, markSheetId, id),
+      ]);
+      return created.meta.changes
+        ? Response.json({ success: true, id }, { status: 201 })
+        : Response.json({ error: "A matching certificate already exists or the mark sheet changed. Refresh and link an existing certificate if available." }, { status: 409 });
+    }
+
     await env.DB.prepare(
       `INSERT INTO certificates (${columns.join(", ")})
        VALUES (${placeholders})`

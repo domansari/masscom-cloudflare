@@ -58,15 +58,16 @@ export async function onRequest({ request, env }) {
         return json({ error: "Choose a DCA certificate with the same roll number, batch code, and student name." }, 400);
       }
     }
+    const sheetId = method === "POST" ? crypto.randomUUID() : id;
     const values = [registration, student, first, second, date, certificateRef];
     const result = method === "POST"
       ? await env.DB.prepare(
         "INSERT INTO marksheets (registration_no, student_name, first_terminal, second_terminal, issued_on, certificate_ref, id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      ).bind(...values, crypto.randomUUID(), account.id).run()
+      ).bind(...values, sheetId, account.id).run()
       : await env.DB.prepare(
         "UPDATE marksheets SET registration_no = ?, student_name = ?, first_terminal = ?, second_terminal = ?, issued_on = ?, certificate_ref = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
       ).bind(...values, id).run();
-    return result.meta.changes ? json({ success: true }, method === "POST" ? 201 : 200) : json({ error: "Mark sheet not found" }, 404);
+    return result.meta.changes ? json({ success: true, id: sheetId }, method === "POST" ? 201 : 200) : json({ error: "Mark sheet not found" }, 404);
   } catch (error) {
     if (error instanceof SyntaxError) return json({ error: "Invalid request" }, 400);
     if (String(error).includes("UNIQUE constraint failed")) return json({ error: "A mark sheet already exists for that registration number or certificate." }, 409);

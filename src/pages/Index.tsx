@@ -58,6 +58,23 @@ const Index = () => {
                 </Link>
               </Card>
 
+          <Card className="hover:shadow-xl transition-all duration-300 bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
+            <CardHeader className="text-center">
+              <div className="mx-auto w-16 h-16 bg-gradient-to-br from-cyan-500 to-cyan-700 rounded-full flex items-center justify-center mb-4 shadow-lg">
+                <Database className="h-8 w-8 text-white" />
+              </div>
+              <CardTitle className="text-xl text-white">Mark Sheets</CardTitle>
+              <CardDescription className="text-gray-300">
+                Enter DCA terminal marks, manage mark sheets, and create certificates for students who pass.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild className="w-full bg-gradient-to-r from-cyan-600 to-cyan-800 hover:from-cyan-700 hover:to-cyan-900" size="lg">
+                <Link to="/marksheets">Create / Manage Mark Sheets</Link>
+              </Button>
+            </CardContent>
+          </Card>
+
           <Card className="hover:shadow-xl transition-all duration-300 cursor-pointer bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
             <Link to="/verify">
               <CardHeader className="text-center">

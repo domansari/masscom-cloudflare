@@ -362,14 +362,19 @@ const ManageCertificates = () => {
             </DialogDescription>
           </DialogHeader>
           {editingCertificate && (
-            <EditCertificateForm
-              certificate={editingCertificate}
-              onUpdate={handleUpdateCertificate}
-              onCancel={() => {
-                setEditDialogOpen(false);
-                setEditingCertificate(null);
-              }}
-            />
+            <>
+              {["dca", "diploma in computer application", "diploma in computer applications"].includes(editingCertificate.course_name.trim().toLowerCase()) && (
+                <Button asChild variant="outline"><Link to={`/marksheets?certificate=${encodeURIComponent(editingCertificate.id)}`}>View Marksheet</Link></Button>
+              )}
+              <EditCertificateForm
+                certificate={editingCertificate}
+                onUpdate={handleUpdateCertificate}
+                onCancel={() => {
+                  setEditDialogOpen(false);
+                  setEditingCertificate(null);
+                }}
+              />
+            </>
           )}
         </DialogContent>
       </Dialog>

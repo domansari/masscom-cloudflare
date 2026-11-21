@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, FileText } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import QRCodeGenerator from "@/components/QRCodeGenerator";
@@ -14,6 +14,11 @@ import CertificatePreview from "@/components/CertificatePreview";
 import { CertificateData } from "@/types/certificate";
 
 const GenerateCertificate = () => {
+  const [params] = useSearchParams();
+  const markSheetId = params.get("marksheet");
+  const [readySheetId, setReadySheetId] = useState<string | null>(null);
+  const [sheetError, setSheetError] = useState("");
+  const [linkedCertificateId, setLinkedCertificateId] = useState("");
   const { toast } = useToast();
   const [formData, setFormData] = useState<CertificateData>({
     studentName: "",
@@ -29,6 +34,31 @@ const GenerateCertificate = () => {
   const [batchNumber, setBatchNumber] = useState("");
   const [qrCodeData, setQrCodeData] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!markSheetId) return;
+    const controller = new AbortController();
+    setSheetError("");
+    setLinkedCertificateId("");
+    fetch("/api/marksheets", { signal: controller.signal }).then(async response => {
+      if (!response.ok) throw new Error("Unable to load the mark sheet.");
+      const { data } = await response.json();
+      const sheet = data.find(item => item.id === markSheetId);
+      const registration = sheet?.registration_no.split("/");
+      if (!sheet || sheet.certificate_ref || registration.length !== 3 ||
+          !registration[0] || !registration[1] || !/^\d{4}$/.test(registration[2]) ||
+          !Number.isInteger(sheet.first_terminal) || sheet.first_terminal < 33 || sheet.first_terminal > 100 ||
+          !Number.isInteger(sheet.second_terminal) || sheet.second_terminal < 33 || sheet.second_terminal > 100) {
+        throw new Error("Choose an unlinked mark sheet with passing marks in both terminals.");
+      }
+      setFormData(current => ({ ...current, studentName: sheet.student_name, rollNo: registration[0], courseName: "Diploma in Computer Application" }));
+      setBatchNumber(registration[1]);
+      setReadySheetId(markSheetId);
+    }).catch(error => {
+      if (!controller.signal.aborted) setSheetError(error.message);
+    });
+    return () => controller.abort();
+  }, [markSheetId]);
 
   // Course options with updated list
   const courseOptions = [
@@ -97,6 +127,7 @@ const GenerateCertificate = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (markSheetId && (readySheetId !== markSheetId || linkedCertificateId)) return;
     setIsLoading(true);
 
     const certificateId = generateCertificateId();
@@ -145,6 +176,7 @@ const GenerateCertificate = () => {
           roll_no: formData.rollNo,
           certificate_id: certificateId,
           batch_number: batchNumber,
+          marksheet_id: markSheetId,
           qr_code_data: qrCodeData
         })
       });
@@ -152,6 +184,11 @@ const GenerateCertificate = () => {
       if (!response.ok) {
         const result = await response.json().catch(() => ({}));
         throw new Error(result.error || "Failed to create certificate");
+      }
+
+      if (markSheetId) {
+        const saved = await response.json();
+        setLinkedCertificateId(saved.id);
       }
 
       // Update form data with generated certificate ID
@@ -205,7 +242,7 @@ const GenerateCertificate = () => {
           <CardHeader>
             <CardTitle className="text-white">Generate Certificate</CardTitle>
             <CardDescription className="text-gray-200">
-              Fill out the form below to generate a new certificate
+              {markSheetId ? "Complete the remaining details. The certificate will be linked to the passing mark sheet." : "Fill out the form below to generate a new certificate"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -216,6 +253,7 @@ const GenerateCertificate = () => {
                   <Input
                     type="text"
                     id="studentName"
+                    readOnly={!!markSheetId}
                     placeholder="Enter student name"
                     value={formData.studentName}
                     onChange={handleChange}
@@ -239,7 +277,7 @@ const GenerateCertificate = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="courseName" className="text-white">Course Name</Label>
-                  <Select onValueChange={(value) => handleSelectChange('courseName', value)}>
+                  <Select value={formData.courseName} disabled={!!markSheetId} onValueChange={(value) => handleSelectChange('courseName', value)}>
                     <SelectTrigger className="bg-white/20 border-white/30 text-white">
                       <SelectValue placeholder="Select course" />
                     </SelectTrigger>
@@ -312,6 +350,7 @@ const GenerateCertificate = () => {
                   <Input
                     type="text"
                     id="rollNo"
+                    readOnly={!!markSheetId}
                     placeholder="Enter Roll Number"
                     value={formData.rollNo}
                     onChange={handleChange}
@@ -326,6 +365,7 @@ const GenerateCertificate = () => {
                   <Input
                     type="text"
                     id="batchNumber"
+                    readOnly={!!markSheetId}
                     placeholder="Enter batch number"
                     value={batchNumber}
                     onChange={(e) => setBatchNumber(e.target.value)}
@@ -344,9 +384,14 @@ const GenerateCertificate = () => {
                 </div>
               </div>
 
+              {sheetError && <p role="alert" className="text-white">{sheetError}</p>}
+              {linkedCertificateId && <div className="flex flex-wrap gap-2">
+                <Button asChild><Link to={`/print/${encodeURIComponent(linkedCertificateId)}`}>View / Print Certificate</Link></Button>
+                <Button asChild variant="outline"><Link to={`/marksheets?certificate=${encodeURIComponent(linkedCertificateId)}#saved-mark-sheets`}>View Marksheet</Link></Button>
+              </div>}
               <Button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || (!!markSheetId && (readySheetId !== markSheetId || !!linkedCertificateId))}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200"
               >
                 {isLoading ? (

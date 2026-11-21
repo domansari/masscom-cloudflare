@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { jsPDF } from "jspdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +71,7 @@ async function request(method = "GET", id?: string, body?: object) {
 
 export default function MarkSheets() {
   const { isAdmin } = useAuth();
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const certificateId = params.get("certificate");
   const [sheets, setSheets] = useState<Sheet[]>([]);
@@ -122,10 +123,14 @@ export default function MarkSheets() {
       : emptyForm);
   }
 
-  async function change(method: string, id?: string, values?: object) {
+  async function change(method: string, id?: string, values?: object, createCertificate = false) {
     setBusy(true);
     try {
-      await request(method, id, values);
+      const saved = await request(method, id, values);
+      if (createCertificate) {
+        navigate(`/generate?marksheet=${encodeURIComponent(saved.id)}`);
+        return;
+      }
       if (method !== "DELETE" || id === editing) reset();
       await refresh();
       setNotice(method === "DELETE" ? "Mark sheet deleted." : "Mark sheet saved.");
@@ -142,9 +147,10 @@ export default function MarkSheets() {
       setNotice("Select this certificate before saving its mark sheet.");
       return;
     }
+    const createCertificate = (event.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "certificate";
     void change(editing ? "PUT" : "POST", editing, {
       ...form, first_terminal: Number(form.first_terminal), second_terminal: Number(form.second_terminal),
-    });
+    }, createCertificate);
   }
 
   const preview = form.first_terminal !== "" && form.second_terminal !== ""
@@ -156,8 +162,8 @@ export default function MarkSheets() {
   const visibleSheets = certificateId ? sheets.filter(sheet => sheet.certificate_ref === certificateId) : sheets;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 px-4 py-8">
-      <Link className="text-white underline" to="/">Certificate portal</Link>
+    <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8">
+      <Link className="-order-2 text-white underline" to="/">Certificate portal</Link>
       <section className="space-y-4 rounded-lg bg-white p-5">
         <h1 className="text-2xl font-bold">DCA Mark Sheets</h1>
         <p>Passing requires at least 33 out of 100 in each terminal.</p>
@@ -179,23 +185,27 @@ export default function MarkSheets() {
             <label key={field}>{label} (out of 100)<Input required type="number" min={0} max={100} step={1} value={form[field]} onChange={e => setForm({ ...form, [field]: e.target.value })} /><small>{modules}</small></label>
           ))}
           {preview && <p className="sm:col-span-2">{preview.total}/200 · {preview.percentage}% · {preview.pass ? "Pass" : "Fail"} · Grade {preview.grade}</p>}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 sm:col-span-2">
             <Button type="submit" disabled={busy}>{editing ? "Save changes" : "Create mark sheet"}</Button>
+            {!certificateId && !form.certificate_ref && <Button type="submit" value="certificate" variant="outline" disabled={busy || !preview?.pass || matchingCertificates.length > 0}>Save &amp; Create Certificate</Button>}
             {editing && <Button type="button" variant="outline" onClick={reset}>Cancel edit</Button>}
           </div>
         </form>
         <p role="status">{notice}</p>
       </section>
-      <section className="space-y-4 rounded-lg bg-white p-5">
+      <section id="saved-mark-sheets" className={`space-y-4 rounded-lg bg-white p-5 ${certificateId ? "-order-1" : ""}`}>
         <h2 className="text-xl font-semibold">Saved mark sheets</h2>
         {certificateId && <Link className="underline" to="/marksheets">Show all mark sheets</Link>}
         {visibleSheets.length === 0 && <p>No mark sheets to display.</p>}
         {visibleSheets.map(sheet => {
           const score = result(sheet.first_terminal, sheet.second_terminal);
           return <article key={sheet.id} className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-            <div><strong>{sheet.student_name}</strong><p>{sheet.registration_no} · {score.total}/200 · {score.percentage}% · {score.pass ? "Pass" : "Fail"}</p></div>
+            <div><strong>{sheet.student_name}</strong><p>{sheet.registration_no} · {score.total}/200 · {score.percentage}% · {score.pass ? "Pass" : "Fail"}</p>
+              <p className="text-sm">1st Terminal {sheet.first_terminal}/100 · 2nd Terminal {sheet.second_terminal}/100</p>
+            </div>
             <div className="flex flex-wrap gap-2">
               {sheet.certificate_ref && <Button asChild variant="outline"><Link to={`/print/${encodeURIComponent(sheet.certificate_ref)}`}>View certificate</Link></Button>}
+              {!sheet.certificate_ref && score.pass && sheet.registration_no.split("/").length === 3 && <Button asChild variant="outline"><Link to={`/generate?marksheet=${encodeURIComponent(sheet.id)}`}>Create Certificate</Link></Button>}
               <Button variant="outline" onClick={() => edit(sheet)} disabled={busy}>Edit</Button>
               <Button variant="outline" onClick={() => download(sheet)}>Download PDF</Button>
               {isAdmin() && <Button variant="destructive" disabled={busy} onClick={() => {
