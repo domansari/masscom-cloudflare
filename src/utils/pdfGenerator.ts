@@ -63,9 +63,17 @@ export async function createCertificatePDF(certificateElement: HTMLElement) {
     });
     if (!canvas.width || !canvas.height) throw new Error("Certificate capture is empty");
 
+    // Let the browser encode the capture without a base64 round trip or PNG recompression.
+    const image = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(blob => {
+        if (blob) resolve(blob);
+        else reject(new Error("Unable to encode the certificate image"));
+      }, "image/jpeg", 0.96);
+    });
+    const imageBytes = new Uint8Array(await image.arrayBuffer());
     const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4", compress: true });
     const { width, height } = pdf.internal.pageSize;
-    pdf.addImage(canvas.toDataURL("image/png"), "PNG", pageMargin, pageMargin,
+    pdf.addImage(imageBytes, "JPEG", pageMargin, pageMargin,
       width - 2 * pageMargin, height - 2 * pageMargin);
     return pdf;
   } finally {
