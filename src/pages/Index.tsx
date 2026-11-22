@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { FileText, Search, Plus, Settings, Shield, Cpu, Database, Clock } from "lucide-react";
 import { Link } from "react-router-dom";
-import CertificatePortalIntro from "@/components/CertificatePortalIntro";
 
 const clockFormat = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
@@ -42,10 +41,6 @@ const Index = () => {
       <div className="absolute inset-0 bg-black/40"></div>
       
       <div className="container mx-auto px-4 py-12 relative z-10">
-        <div className="mb-12">
-          <CertificatePortalIntro />
-        </div>
-
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
               <Card className="hover:shadow-xl transition-all duration-300 cursor-pointer bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
                 <Link to="/generate">
