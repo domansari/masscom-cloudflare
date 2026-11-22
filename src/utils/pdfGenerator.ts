@@ -1,116 +1,52 @@
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
-import QRCode from 'qrcode';
+export async function createCertificatePDF(certificateElement: HTMLElement) {
+  const certificate = certificateElement.querySelector<HTMLElement>("#certificate-element");
+  if (!certificate) throw new Error("Certificate element not found");
 
-export const generateCertificatePDF = async (certificateElement: HTMLElement, filename: string) => {
-  try {
-    console.log('Starting PDF generation...');
-    
-    // Hide any no-print elements during PDF generation
-    const noPrintElements = document.querySelectorAll('.no-print');
-    noPrintElements.forEach(el => (el as HTMLElement).style.display = 'none');
-    
-    // Find the actual certificate element
-    const actualCertificate = certificateElement.querySelector('#certificate-element') as HTMLElement;
-    if (!actualCertificate) {
-      throw new Error('Certificate element not found');
-    }
-    
-    // Create a temporary container for PDF generation
-    const tempContainer = document.createElement('div');
-    tempContainer.style.position = 'fixed';
-    tempContainer.style.left = '0';
-    tempContainer.style.top = '0';
-    tempContainer.style.width = '210mm';
-    tempContainer.style.height = '297mm';
-    tempContainer.style.transform = 'scale(1)';
-    tempContainer.style.transformOrigin = 'top left';
-    tempContainer.style.zIndex = '99999';
-    tempContainer.style.backgroundColor = 'white';
-    tempContainer.style.overflow = 'hidden';
-    
-    // Clone the certificate element and apply the background directly
-    const clonedElement = actualCertificate.cloneNode(true) as HTMLElement;
-    clonedElement.style.transform = 'scale(1)';
-    clonedElement.style.width = '210mm';
-    clonedElement.style.height = '297mm';
-    clonedElement.style.margin = '0';
-    clonedElement.style.padding = '0';
-    clonedElement.style.overflow = 'hidden';
-    clonedElement.style.backgroundImage = `url('/lovable-uploads/7ab347ae-d0be-4f64-ae7e-c4bfd0378ac4.png')`;
-    clonedElement.style.backgroundSize = 'cover';
-    clonedElement.style.backgroundPosition = 'center';
-    clonedElement.style.backgroundRepeat = 'no-repeat';
-    
-    // Ensure QR code is visible in the cloned element
-    const originalQRCanvas = actualCertificate.querySelector('canvas');
-    const clonedQRCanvas = clonedElement.querySelector('canvas');
-    if (originalQRCanvas && clonedQRCanvas) {
-      const ctx = clonedQRCanvas.getContext('2d');
-      if (ctx) {
-        clonedQRCanvas.width = originalQRCanvas.width;
-        clonedQRCanvas.height = originalQRCanvas.height;
-        ctx.drawImage(originalQRCanvas, 0, 0);
-      }
-    }
-    
-    tempContainer.appendChild(clonedElement);
-    document.body.appendChild(tempContainer);
-    
-    // Wait for images to load
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    console.log('Creating canvas for PDF...');
-    
-    // Create canvas with exact A4 pixel dimensions at high resolution
-    const canvas = await html2canvas(tempContainer, {
-      scale: 3, // Higher scale for better quality
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      width: 794, // A4 width in pixels at 96 DPI
-      height: 1123, // A4 height in pixels at 96 DPI
-      logging: false,
-      removeContainer: false,
-      imageTimeout: 15000 // Increase timeout for image loading
-    });
-    
-    // Remove the temporary container
-    document.body.removeChild(tempContainer);
-    
-    // Restore no-print elements
-    noPrintElements.forEach(el => (el as HTMLElement).style.display = '');
-    
-    console.log('Canvas created, generating PDF...');
-    console.log('Canvas dimensions:', canvas.width, 'x', canvas.height);
-    
-    if (canvas.width === 0 || canvas.height === 0) {
-      throw new Error('Canvas has zero dimensions');
-    }
-    
-    const imgData = canvas.toDataURL('image/png', 1.0);
-    
-    if (!imgData || imgData === 'data:,') {
-      throw new Error('Failed to create image data from canvas');
-    }
-    
-    // Create PDF with exact A4 dimensions
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4'
-    });
-    
-    // Add image to fill entire A4 page
-    pdf.addImage(imgData, 'PNG', 0, 0, 210, 297);
-    
-    console.log('Saving PDF...');
-    pdf.save(`${filename}_v1.0.pdf`);
-    
-    return true;
-  } catch (error) {
-    console.error('Error generating PDF:', error);
-    throw error;
+  const container = document.createElement("div");
+  Object.assign(container.style, {
+    position: "fixed", left: "-10000px", top: "0", width: "210mm", height: "297mm",
+    backgroundColor: "white", overflow: "hidden",
+  });
+
+  const copy = certificate.cloneNode(true) as HTMLElement;
+  Object.assign(copy.style, {
+    transform: "none", width: "210mm", height: "297mm", margin: "0", padding: "0",
+    overflow: "hidden", backgroundImage: "url('/lovable-uploads/7ab347ae-d0be-4f64-ae7e-c4bfd0378ac4.png')",
+    backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat",
+  });
+
+  // Cloning a canvas does not copy its pixels.
+  const sourceQR = certificate.querySelector("canvas");
+  const copiedQR = copy.querySelector("canvas");
+  if (sourceQR && copiedQR) {
+    copiedQR.width = sourceQR.width;
+    copiedQR.height = sourceQR.height;
+    copiedQR.getContext("2d")?.drawImage(sourceQR, 0, 0);
   }
-};
+
+  container.appendChild(copy);
+  document.body.appendChild(container);
+  try {
+    await document.fonts.ready;
+    const canvas = await html2canvas(container, {
+      scale: 3, useCORS: true, backgroundColor: "#ffffff",
+      width: 794, height: 1123, logging: false, imageTimeout: 15000,
+    });
+    if (!canvas.width || !canvas.height) throw new Error("Certificate capture is empty");
+
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+    pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 210, 297);
+    return pdf;
+  } finally {
+    container.remove();
+  }
+}
+
+export async function generateCertificatePDF(certificateElement: HTMLElement, filename: string) {
+  const pdf = await createCertificatePDF(certificateElement);
+  pdf.save(`${filename}_v1.0.pdf`);
+  return true;
+}
