@@ -9,7 +9,7 @@ export default function CertificatePortalIntro() {
         className="mx-auto mb-4 h-auto w-20 rounded-md sm:w-24"
       />
       <h1 className="mb-2 text-3xl font-bold text-white sm:text-4xl">
-        Masscom Infotech Education
+        Student Record Managment
       </h1>
       <p className="mb-3 text-xl font-semibold text-white sm:text-2xl">
         Certificate Management System

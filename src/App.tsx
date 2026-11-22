@@ -26,17 +26,6 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <div className="min-h-screen">
-            <nav aria-label="Main website" className="no-print bg-black/60 text-white">
-              <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <a
-                  href="https://www.masscom.co.in/"
-                  className="inline-flex min-h-11 items-center gap-2 py-2 text-sm font-semibold hover:underline focus-visible:outline focus-visible:outline-2"
-                >
-                  <img src="https://www.masscom.co.in/assets/logo-121x131.png" alt="" width={32} height={35} className="rounded bg-white object-contain" />
-                  <span>Home</span>
-                </a>
-              </div>
-            </nav>
             <Header />
             <Routes>
               <Route path="/auth" element={<Auth />} />

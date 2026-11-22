@@ -4,6 +4,18 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: Orbitron;
+  src: url("https://www.masscom.co.in/assets/orbitron-semibold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+
+.student-record-title {
+  font: 600 clamp(.72rem, 3.2vw, 1rem)/1.2 Orbitron, system-ui, sans-serif;
+  white-space: nowrap;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
