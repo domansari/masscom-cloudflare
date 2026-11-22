@@ -32,6 +32,46 @@ const actionStyle = "h-8 w-8 shrink-0 p-0 text-white shadow-lg transition-all du
 const emptyForm = { roll_no: "", batch_code: "", year: "", certificate_ref: "", student_name: "", father_name: "", issued_on: "", first_terminal: "", second_terminal: "", third_terminal: "" };
 const normalize = (value?: string) => (value ?? "").trim().toLowerCase();
 
+function marksheetFilename(sheet: Sheet) {
+  return `${String(sheet.exam_course).toUpperCase()}-${sheet.registration_no.replace(/[^a-z0-9_-]/gi, "-")}.pdf`;
+}
+
+function LinkedMarksheetPdf({ sheet, onPrint }: { sheet: Sheet; onPrint: () => void }) {
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl = "";
+    createMarksheetPdf(sheet).then(pdf => {
+      if (!active) return;
+      objectUrl = URL.createObjectURL(pdf.output("blob"));
+      setUrl(objectUrl);
+    }).catch(() => {
+      if (active) setError("Unable to prepare the marksheet PDF. Reload the page to try again.");
+    });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [sheet]);
+
+  if (error) return <p role="alert">{error}</p>;
+  if (!url) return <p role="status">Preparing the marksheet PDF…</p>;
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" onClick={onPrint}><Printer className="mr-2 h-4 w-4" />Print</Button>
+        <Button asChild variant="outline">
+          <a href={url} download={marksheetFilename(sheet)}><Download className="mr-2 h-4 w-4" />Download PDF</a>
+        </Button>
+      </div>
+      <iframe src={url} title="Marksheet PDF" className="h-[75vh] min-h-96 w-full rounded-md border bg-slate-100" />
+    </>
+  );
+}
+
 async function request(method = "GET", id?: string, body?: object) {
   const response = await fetch(`/api/marksheets${id ? `?id=${encodeURIComponent(id)}` : ""}`, {
     method,
@@ -114,7 +154,7 @@ function MarkSheetWorkspace({ manage, certificateId, editLinked }: { manage: boo
         printWindow.location.replace(url);
         window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
       } else {
-        pdf.save(`${sheet.exam_course.toUpperCase()}-${sheet.registration_no.replace(/[^a-z0-9_-]/gi, "-")}.pdf`);
+        pdf.save(marksheetFilename(sheet));
       }
     } catch {
       printWindow?.close();
@@ -375,30 +415,16 @@ function MarkSheetWorkspace({ manage, certificateId, editLinked }: { manage: boo
 
   if (previewOnly) {
     const sheet = visibleSheets[0];
-    const score = sheet && marksheetResult(sheet);
     return (
       <main className="mx-auto max-w-3xl space-y-4 px-4 py-8">
-        <Link className="text-white underline" to={`/print/${encodeURIComponent(certificateId)}`}>Back to Certificate</Link>
+        <Button asChild variant="outline">
+          <Link to="/manage"><ArrowLeft className="mr-2 h-4 w-4" />Back to Manage Certificates</Link>
+        </Button>
         <Card>
           <CardHeader><CardTitle>Marksheet Preview</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {loading ? <p role="status">Loading marksheet…</p> : loadError ? <p role="alert">{loadError}</p> : !sheet ? <p>No marksheet is linked to this certificate.</p> : (
-              <>
-                <div>
-                  <h2 className="text-lg font-semibold">{sheet.student_name}</h2>
-                  <p>Registration No. {sheet.registration_no}</p>
-                  <p>{examCourses[sheet.exam_course].name}</p>
-                  <p>Issue date {sheet.issued_on}</p>
-                </div>
-                <Table>
-                  <TableHeader><TableRow><TableHead>Terminal</TableHead><TableHead>Course content</TableHead><TableHead>Marks</TableHead></TableRow></TableHeader>
-                  <TableBody>{examCourses[sheet.exam_course].modules.map(([field, label, modules]) => (
-                    <TableRow key={field}><TableCell>{label}</TableCell><TableCell>{modules}</TableCell><TableCell>{sheet[field]}/100</TableCell></TableRow>
-                  ))}</TableBody>
-                </Table>
-                <p className="font-medium">{score.total}/{score.maximum} · {score.percentage}% · {score.pass ? "Pass" : "Fail"} · Grade {score.grade}</p>
-                <Button variant="outline" onClick={() => void outputMarksheet(sheet)}><Download className="mr-2 h-4 w-4" />Download PDF</Button>
-              </>
+              <LinkedMarksheetPdf key={sheet.id} sheet={sheet} onPrint={() => void outputMarksheet(sheet, true)} />
             )}
             {notice && <p role="status">{notice}</p>}
           </CardContent>
