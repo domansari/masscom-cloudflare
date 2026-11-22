@@ -18,6 +18,9 @@ export type PrintableMarksheet = {
 
 const courseDurations: Partial<Record<PrintableMarksheet["exam_course"], string>> = { dca: "8 Months", cca: "4 Months", cdtp: "4 Months" };
 
+const pageMargin = 0.72; // 0.01 inch in PDF points.
+const outerFrame = { x: 56.5, y: 20.5, width: 508, height: 751, stroke: 2.5 };
+
 async function imageBytes(url: string) {
   const response = await fetch(url);
   if (!response.ok) throw new Error("Could not load the marksheet artwork.");
@@ -31,8 +34,8 @@ export async function createMarksheetPdf(sheet: PrintableMarksheet) {
 }
 
 export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wordmark: Uint8Array, existingPdf?: jsPDF, signature?: string) {
-  const pdf = existingPdf || new jsPDF({ unit: "pt", format: "letter", compress: true, putOnlyUsedFonts: true });
-  if (existingPdf) pdf.addPage("letter", "portrait");
+  const pdf = existingPdf || new jsPDF({ unit: "pt", format: "a4", compress: true, putOnlyUsedFonts: true });
+  if (existingPdf) pdf.addPage("a4", "portrait");
   const course = examCourses[sheet.exam_course];
   const score = marksheetResult(sheet);
   const left = 87.5;
@@ -58,8 +61,20 @@ export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wo
     pdf.text(text, x, y);
     pdf.setFontSize(initial);
   };
-  pdf.setLineWidth(2.5);
-  pdf.rect(56.5, 20.5, 508, 751);
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const frameLeft = outerFrame.x - outerFrame.stroke / 2;
+  const frameTop = outerFrame.y - outerFrame.stroke / 2;
+  const transform = pdf.unitMatrix.clone();
+  transform.sx = (pageWidth - 2 * pageMargin) / (outerFrame.width + outerFrame.stroke);
+  transform.sy = (pageHeight - 2 * pageMargin) / (outerFrame.height + outerFrame.stroke);
+  transform.tx = pageMargin - transform.sx * frameLeft;
+  // The PDF matrix uses a bottom-left origin, while jsPDF drawing coordinates start at the top left.
+  transform.ty = pageHeight - pageMargin - transform.sy * (pageHeight - frameTop);
+  pdf.saveGraphicsState();
+  pdf.setCurrentTransformationMatrix(transform);
+  pdf.setLineWidth(outerFrame.stroke);
+  pdf.rect(outerFrame.x, outerFrame.y, outerFrame.width, outerFrame.height);
   pdf.setLineWidth(0.55);
   pdf.rect(60, 24, 501, 744);
   pdf.addImage(wordmark, "PNG", 110, 39.3, 302.33, 14.33);
@@ -139,6 +154,7 @@ export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wo
   font("normal", 10.5);
   pdf.text("1st Floor, Mohsin Market, Yusufpur, Mohammadabad, Ghazipur (U.P.) 233227", 310, 749, { align: "center" });
   pdf.text("info@masscom.co.in  |  www.masscom.co.in", 310, 762, { align: "center" });
+  pdf.restoreGraphicsState();
   return pdf;
 }
 
