@@ -52,6 +52,13 @@ export function validExamMarks(code, marks, minimum = 0) {
   );
 }
 
+export function validMarksheetEntries(code, marks) {
+  if (!Object.hasOwn(examCourses, code)) return false;
+  return examCourses[code].modules.every(([field]) =>
+    marks?.[field] === null || (Number.isInteger(marks?.[field]) && marks[field] >= 0 && marks[field] <= 100)
+  );
+}
+
 export function examResult(marks) {
   const total = marks.reduce((sum, mark) => sum + mark, 0);
   const maximum = marks.length * 100;

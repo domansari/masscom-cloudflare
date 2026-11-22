@@ -18,7 +18,7 @@ export async function onRequestGet({ request, env }) {
       `SELECT registration_no, student_name, issued_on, first_terminal, second_terminal, third_terminal,
               COALESCE(publishing_course, exam_course) AS exam_course
        FROM marksheets
-       WHERE issued_on <= date('now', '+5 hours', '+30 minutes')
+       WHERE issued_on <> '' AND issued_on <= date('now', '+5 hours', '+30 minutes')
          AND (registration_no = ? COLLATE NOCASE
            OR (instr(?, '/') = 0 AND substr(registration_no, 1, instr(registration_no, '/') - 1) = ? COLLATE NOCASE))
        LIMIT 2`

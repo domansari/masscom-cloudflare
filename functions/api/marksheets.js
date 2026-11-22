@@ -1,5 +1,5 @@
 import { confirmDeletePassword } from "./_delete-password.js";
-import { examCourseCode, examCourses, validExamMarks } from "./_exam-courses.js";
+import { examCourseCode, examCourses, validMarksheetEntries } from "./_exam-courses.js";
 import { requireAdmin, requireCertificateUser, sameOrigin } from "./_admin.js";
 
 const json = (data, status = 200) => Response.json(data, {
@@ -16,7 +16,13 @@ export async function onRequest({ request, env, allowLegacyRegistration = false 
 
     if (method === "GET") {
       const result = await env.DB.prepare(
-        "SELECT id, registration_no, student_name, father_name, first_terminal, second_terminal, third_terminal, COALESCE(publishing_course, exam_course) AS exam_course, issued_on, certificate_ref, (SELECT duration FROM certificates WHERE certificates.id = marksheets.certificate_ref) AS duration FROM marksheets ORDER BY updated_at DESC, id"
+        `SELECT id, registration_no, student_name, father_name,
+          CASE WHEN undeclared_exams & 1 = 0 THEN first_terminal END AS first_terminal,
+          CASE WHEN undeclared_exams & 2 = 0 THEN second_terminal END AS second_terminal,
+          CASE WHEN undeclared_exams & 4 = 0 THEN third_terminal END AS third_terminal,
+          COALESCE(publishing_course, exam_course) AS exam_course, issued_on, certificate_ref,
+          (SELECT duration FROM certificates WHERE certificates.id = marksheets.certificate_ref) AS duration
+          FROM marksheets ORDER BY updated_at DESC, id`
       ).all();
       return json({ data: result.results });
     }
@@ -45,16 +51,18 @@ export async function onRequest({ request, env, allowLegacyRegistration = false 
     if (method === "PUT" && !existing) return json({ error: "Mark sheet not found" }, 404);
     const examCode = existing?.exam_course ?? data?.exam_course ?? "dca";
     const father = typeof data?.father_name === "string" ? data.father_name.trim() : existing?.father_name ?? "";
-    const first = data?.first_terminal;
-
-    const parsedDate = typeof date === "string" ? new Date(date) : new Date(NaN);
     if ((!legacyRegistration && (!roll || !batch || !/^\d{4}$/.test(year) || !parts.every(part => /^[^/\x00-\x1f]+$/.test(part)))) ||
         /[\x00-\x1f]/.test(registration) ||
         registration.length > 100 || !student || student.length > 150 || father.length > 150 ||
-        !validExamMarks(examCode, data) ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(+parsedDate) ||
-        parsedDate.toISOString().slice(0, 10) !== date) {
-      return json({ error: "Enter roll number, batch code, four-digit year, student name, issue date, and all required exam marks." }, 400);
+        !validMarksheetEntries(examCode, data)) {
+      return json({ error: "Enter the registration and student details. For each exam, enter marks or choose Not Declared." }, 400);
+    }
+    const modules = examCourses[examCode].modules;
+    const undeclared = modules.reduce((flags, [field], index) => flags | (data[field] === null ? 1 << index : 0), 0);
+    const parsedDate = typeof date === "string" ? new Date(date) : new Date(NaN);
+    if (undeclared ? Boolean(date) :
+      !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(+parsedDate) || parsedDate.toISOString().slice(0, 10) !== date) {
+      return json({ error: undeclared ? "Set the issue date after all marks are declared." : "Enter a valid issue date." }, 400);
     }
     if (certificateRef) {
       if (typeof certificateRef !== "string" || certificateRef.length > 128) return json({ error: "Invalid certificate" }, 400);
@@ -69,18 +77,19 @@ export async function onRequest({ request, env, allowLegacyRegistration = false 
         return json({ error: "Choose a certificate for the same course with the same roll number, batch code, and student name." }, 400);
       }
     }
-    const moduleCount = examCourses[examCode].modules.length;
-    const second = moduleCount >= 2 ? data.second_terminal : 0;
-    const third = moduleCount >= 3 ? data.third_terminal : null;
+    // The existing required mark columns retain their numeric constraints. The mask records pending marks separately from a real zero.
+    const first = data.first_terminal ?? 0;
+    const second = modules.length >= 2 ? data.second_terminal ?? 0 : 0;
+    const third = modules.length >= 3 ? data.third_terminal : null;
     const publishingCourse = ["cdtp", "adtp"].includes(examCode) ? examCode : null;
     const sheetId = method === "POST" ? crypto.randomUUID() : id;
-    const values = [registration, student, father || null, first, second, third, date, certificateRef];
+    const values = [registration, student, father || null, first, second, third, undeclared ? "" : date, certificateRef, undeclared];
     const result = method === "POST"
       ? await env.DB.prepare(
-        "INSERT INTO marksheets (registration_no, student_name, father_name, first_terminal, second_terminal, third_terminal, issued_on, certificate_ref, id, created_by, exam_course, publishing_course) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO marksheets (registration_no, student_name, father_name, first_terminal, second_terminal, third_terminal, issued_on, certificate_ref, undeclared_exams, id, created_by, exam_course, publishing_course) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(...values, sheetId, account.id, publishingCourse ? "dca" : examCode, publishingCourse).run()
       : await env.DB.prepare(
-        "UPDATE marksheets SET registration_no = ?, student_name = ?, father_name = ?, first_terminal = ?, second_terminal = ?, third_terminal = ?, issued_on = ?, certificate_ref = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        "UPDATE marksheets SET registration_no = ?, student_name = ?, father_name = ?, first_terminal = ?, second_terminal = ?, third_terminal = ?, issued_on = ?, certificate_ref = ?, undeclared_exams = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
       ).bind(...values, id).run();
     return result.meta.changes ? json({ success: true, id: sheetId }, method === "POST" ? 201 : 200) : json({ error: "Mark sheet not found" }, 404);
   } catch (error) {

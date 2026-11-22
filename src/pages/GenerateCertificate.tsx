@@ -50,7 +50,7 @@ const GenerateCertificate = () => {
       const registration = sheet?.registration_no.split("/");
       if (!sheet || sheet.certificate_ref || registration.length !== 3 ||
           !registration[0] || !registration[1] || !/^\d{4}$/.test(registration[2]) ||
-          !validExamMarks(sheet.exam_course, sheet, passingMark)) {
+          !sheet.issued_on || !validExamMarks(sheet.exam_course, sheet, passingMark)) {
         throw new Error("Choose an unlinked mark sheet with passing marks in each required exam.");
       }
       setFormData(current => ({ ...current, studentName: sheet.student_name, fatherName: sheet.father_name ?? "", grade: marksheetResult(sheet).grade, rollNo: registration[0], courseName: examCourses[sheet.exam_course].name }));

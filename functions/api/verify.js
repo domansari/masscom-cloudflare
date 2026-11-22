@@ -36,7 +36,7 @@ export async function onRequestGet(context) {
               m.issued_on, c.duration
        FROM marksheets m
        JOIN certificates c ON c.id = m.certificate_ref
-       WHERE c.certificate_id = ?`
+       WHERE c.certificate_id = ? AND m.issued_on <> ''`
     ).bind(certificateId).first();
 
     return Response.json({ certificate, marksheet: marksheet || null }, {

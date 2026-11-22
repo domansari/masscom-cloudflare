@@ -3,7 +3,7 @@ import { Download, FileSpreadsheet, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { backupColumns, formatBackupValue, workbookTitle, type BackupRow, type BackupType } from "@/lib/backup-columns";
-import { validExamMarks } from "../../functions/api/_exam-courses.js";
+import { examCourses, validExamMarks, validMarksheetEntries } from "../../functions/api/_exam-courses.js";
 
 type ImportRow = { number: number; data: BackupRow };
 type ImportReview = { rows: ImportRow[]; errors: string[] };
@@ -46,9 +46,12 @@ export default function ExcelBackup({ type, onImported }: { type: BackupType; on
           const links = new Map(certificates.map(certificate => [certificate.id, certificate.certificate_id]));
           worksheet.addRows(records.map(sheet => {
             const [roll_no, batch_code, year] = sheet.registration_no.split("/");
+            const examMarks = Object.fromEntries(examCourses[sheet.exam_course].modules.map(([field]) => [
+              field, sheet[field] ?? "Not Declared",
+            ]));
             return { ...sheet, roll_no, batch_code, year,
               second_terminal: ["cca", "cdtp"].includes(sheet.exam_course) ? null : sheet.second_terminal,
-              linked_certificate_id: links.get(sheet.certificate_ref) ?? "" };
+              ...examMarks, linked_certificate_id: links.get(sheet.certificate_ref) ?? "" };
           }));
         }
       }
@@ -62,6 +65,7 @@ export default function ExcelBackup({ type, onImported }: { type: BackupType; on
           ["Course codes: dca, cca, adca, cdtp, adtp."],
           ["For new marksheets, fill roll number, batch code and year. Keep Saved Registration No. on restored backup rows."],
           ["Enter exam 1 only for cca or cdtp, exams 1–2 for dca, and exams 1–3 for adca or adtp."],
+          ["For a pending exam enter Not Declared. Leave Issue Date blank until all marks are available."],
           ["To link a marksheet, enter the Certificate ID of an existing certificate."],
         ] : [["This workbook is an export of certificate records."]]),
       ]);
@@ -114,8 +118,13 @@ export default function ExcelBackup({ type, onImported }: { type: BackupType; on
           if (!Object.keys(data).length) return;
           const missing = columns.find(column => column.required && data[column.key] === undefined);
           if (missing) throw new Error(`${missing.label} is required.`);
-          if (type === "marksheets" && ((!data.registration_no && (!data.roll_no || !data.batch_code || !/^\d{4}$/.test(String(data.year)))) || !validExamMarks(data.exam_course, data))) {
-            throw new Error("Enter the registration details, a valid course code and all marks required for that course.");
+          if (type === "marksheets") {
+            if ((!data.registration_no && (!data.roll_no || !data.batch_code || !/^\d{4}$/.test(String(data.year)))) || !validMarksheetEntries(data.exam_course, data)) {
+              throw new Error("Enter the registration details, a valid course code and marks or Not Declared for each required exam.");
+            }
+            if (Boolean(data.issued_on) !== validExamMarks(data.exam_course, data)) {
+              throw new Error("Enter an issue date only when all exam marks are declared.");
+            }
           }
           rows.push({ number, data });
         } catch (error) {

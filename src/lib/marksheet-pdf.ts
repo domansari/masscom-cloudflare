@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import { examCourses, marksheetResult, passingMark } from "../../functions/api/_exam-courses.js";
+import { examCourses, marksheetResult, passingMark, validExamMarks } from "../../functions/api/_exam-courses.js";
 import logoUrl from "@/assets/marksheet-logo.png";
 import wordmarkUrl from "@/assets/marksheet-wordmark.png";
 import { controllerSignatureData } from "@/assets/controller-signature-data";
@@ -9,8 +9,8 @@ export type PrintableMarksheet = {
   student_name: string;
   father_name: string | null;
   issued_on: string;
-  first_terminal: number;
-  second_terminal: number;
+  first_terminal: number | null;
+  second_terminal: number | null;
   third_terminal: number | null;
   exam_course: keyof typeof examCourses;
   duration?: string | null;
@@ -37,7 +37,7 @@ export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wo
   const pdf = existingPdf || new jsPDF({ unit: "pt", format: "a4", compress: true, putOnlyUsedFonts: true });
   if (existingPdf) pdf.addPage("a4", "portrait");
   const course = examCourses[sheet.exam_course];
-  const score = marksheetResult(sheet);
+  const score = validExamMarks(sheet.exam_course, sheet) ? marksheetResult(sheet) : null;
   const left = 87.5;
   const right = 531.5;
   const columns = [left, 129, 372, 454, right];
@@ -119,7 +119,8 @@ export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wo
     font("normal", 11.5);
     pdf.text(String(index + 1), center(0), y, { align: "center" });
     pdf.text("100", center(2), y, { align: "center" });
-    pdf.text(String(sheet[field]), center(3), y, { align: "center" });
+    if (sheet[field] == null) font("normal", 10);
+    pdf.text(sheet[field] == null ? "Not Declared" : String(sheet[field]), center(3), y, { align: "center" });
     font("bold", 12);
     pdf.text(label, 141, y - 4);
     font("normal", 10.5);
@@ -128,14 +129,14 @@ export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wo
 
   font("bold", 12);
   pdf.text("TOTAL :", 370, 612, { align: "right" });
-  pdf.text(String(score.maximum), center(2), 612, { align: "center" });
-  pdf.text(String(score.total), center(3), 612, { align: "center" });
+  pdf.text(String(course.modules.length * 100), center(2), 612, { align: "center" });
+  pdf.text(score ? String(score.total) : "-", center(3), 612, { align: "center" });
   font("italic", 13);
   pdf.text("Percentage :", 89, 640);
   pdf.text("Grade :", 405, 640);
   font("bold", 13);
-  pdf.text(`${score.percentage}%`, 169, 640);
-  pdf.text(score.grade, 452, 640);
+  pdf.text(score ? `${score.percentage}%` : "-", 169, 640);
+  pdf.text(score?.grade ?? "Pending", 452, 640);
 
   pdf.setLineWidth(0.8);
   const signatures = [[70, 169, "Prepared By"], [244, 342, "Date of Issue"], [400, 534, "Controller of Examination"]] as const;

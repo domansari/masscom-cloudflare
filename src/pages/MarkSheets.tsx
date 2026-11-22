@@ -1,6 +1,6 @@
 import ExcelBackup from "@/components/ExcelBackup";
 import { DeleteCertificateDialog } from "@/components/manage-certificates/DeleteCertificateDialog";
-import { examCourseCode, examCourses, examResult, marksheetResult, passingMark } from "../../functions/api/_exam-courses.js";
+import { examCourseCode, examCourses, marksheetResult, passingMark, validExamMarks, validMarksheetEntries } from "../../functions/api/_exam-courses.js";
 import { ArrowLeft, ArrowDown, ArrowUp, ArrowUpDown, Download, Edit, FileBadge, FilePlus, Printer, Search, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,6 +31,9 @@ const actionStyle = "h-8 w-8 shrink-0 p-0 text-white shadow-lg transition-all du
 
 const emptyForm = { roll_no: "", batch_code: "", year: "", certificate_ref: "", student_name: "", father_name: "", issued_on: "", first_terminal: "", second_terminal: "", third_terminal: "" };
 const normalize = (value?: string) => (value ?? "").trim().toLowerCase();
+const notDeclared = "not-declared";
+const markInput = (value: number | null) => value === null ? notDeclared : String(value);
+const markLabel = (value: number | null) => value === null ? "Not Declared" : `${value}/100`;
 
 function marksheetFilename(sheet: Sheet) {
   return `${String(sheet.exam_course).toUpperCase()}-${sheet.registration_no.replace(/[^a-z0-9_-]/gi, "-")}.pdf`;
@@ -234,7 +237,7 @@ function MarkSheetWorkspace({ manage, certificateId, editLinked }: { manage: boo
     setForm({
       ...emptyForm, roll_no, batch_code, year, certificate_ref: sheet.certificate_ref ?? "",
       student_name: sheet.student_name, father_name: sheet.father_name ?? "", issued_on: sheet.issued_on,
-      first_terminal: String(sheet.first_terminal), second_terminal: String(sheet.second_terminal), third_terminal: String(sheet.third_terminal ?? ""),
+      first_terminal: markInput(sheet.first_terminal), second_terminal: markInput(sheet.second_terminal), third_terminal: markInput(sheet.third_terminal),
     });
   }
 
@@ -290,15 +293,19 @@ function MarkSheetWorkspace({ manage, certificateId, editLinked }: { manage: boo
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy || (editLinked && !linkedCertificate)) return;
+    if (busy || !entriesReady || (editLinked && !linkedCertificate)) return;
     const createCertificate = (event.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "certificate";
+    if (createCertificate && !preview?.pass) return;
     void change(editing ? "PUT" : "POST", editing, {
-      ...form, exam_course: editingCourse, ...Object.fromEntries(terminals.map(([field]) => [field, Number(form[field])])),
+      ...form, issued_on: preview ? form.issued_on : "", exam_course: editingCourse, ...entries,
     }, createCertificate);
   }
 
-  const preview = terminals.every(([field]) => form[field] !== "")
-    ? examResult(terminals.map(([field]) => Number(form[field]))) : null;
+  const entries = Object.fromEntries(terminals.map(([field]) => [
+    field, form[field] === notDeclared ? null : form[field] === "" ? undefined : Number(form[field]),
+  ]));
+  const entriesReady = validMarksheetEntries(editingCourse, entries);
+  const preview = validExamMarks(editingCourse, entries) ? marksheetResult({ ...entries, exam_course: editingCourse }) : null;
   const matchingCertificates = certificates.filter(certificate => examCourseCode(certificate.course_name) === editingCourse && form.roll_no.trim() && form.batch_code.trim() &&
     normalize(certificate.roll_no) === normalize(form.roll_no) &&
     normalize(certificate.batch_number) === normalize(form.batch_code) &&
@@ -352,13 +359,26 @@ function MarkSheetWorkspace({ manage, certificateId, editLinked }: { manage: boo
               {matchingCertificates.map(certificate => <option key={certificate.id} value={certificate.id}>{certificate.certificate_id}</option>)}
             </select>
           </label>}
-          <label>Date of issue<Input required type="date" value={form.issued_on} onChange={e => setForm({ ...form, issued_on: e.target.value })} /></label>
           {terminals.map(([field, label, modules]) => (
-            <label key={field}>{label} · Max 100 · Passing {passingMark}<Input required type="number" min={0} max={100} step={1} value={form[field]} onChange={e => setForm({ ...form, [field]: e.target.value })} /><small>{modules}</small></label>
+            <fieldset key={field} className="min-w-0 space-y-2">
+              <legend>{label} · Max 100 · Passing {passingMark}</legend>
+              <Input aria-label={`${label} Marks Secured`} required={form[field] !== notDeclared} disabled={form[field] === notDeclared}
+                type="number" min={0} max={100} step={1} value={form[field] === notDeclared ? "" : form[field]}
+                onChange={e => setForm({ ...form, [field]: e.target.value })} />
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={form[field] === notDeclared}
+                  onChange={e => setForm({ ...form, [field]: e.target.checked ? notDeclared : "" })} />
+                Not Declared
+              </label>
+              <small>{modules}</small>
+            </fieldset>
           ))}
+          <label>Date of issue<Input required={Boolean(preview)} disabled={!preview} type="date" value={preview ? form.issued_on : ""}
+            onChange={e => setForm({ ...form, issued_on: e.target.value })} /></label>
+          {entriesReady && !preview && <p className="sm:col-span-2">Save now and enter the issue date after all marks are declared.</p>}
           {preview && <p className="sm:col-span-2">{preview.total}/{preview.maximum} · {preview.percentage}% · {preview.pass ? "Pass" : "Fail"} · Grade {preview.grade}</p>}
           <div className="flex flex-wrap gap-2 sm:col-span-2">
-            <Button type="submit" disabled={busy} className={showSaved ? undefined : "bg-blue-600 text-white hover:bg-blue-700"}>{editing ? "Save changes" : "Create mark sheet"}</Button>
+            <Button type="submit" disabled={busy || !entriesReady} className={showSaved ? undefined : "bg-blue-600 text-white hover:bg-blue-700"}>{editing ? "Save changes" : "Create mark sheet"}</Button>
             {!certificateId && !form.certificate_ref && <Button type="submit" value="certificate" variant="outline" className={showSaved ? undefined : "border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"} disabled={busy || !preview?.pass || matchingCertificates.length > 0}>Save &amp; Create Certificate</Button>}
             {editing && !editLinked && <Button type="button" variant="outline" onClick={reset}>Cancel edit</Button>}
           </div>
@@ -499,22 +519,23 @@ function MarkSheetWorkspace({ manage, certificateId, editLinked }: { manage: boo
                     </TableRow>
                   </TableHeader>
                   <TableBody>{sortedSheets.slice(start, start + pageSize).map(sheet => {
-                    const score = marksheetResult(sheet);
+                    const score = validExamMarks(sheet.exam_course, sheet) ? marksheetResult(sheet) : null;
+                    const moduleCount = examCourses[sheet.exam_course].modules.length;
                     return <TableRow key={sheet.id} className="border-white/20 text-gray-200">
                       <TableCell className="font-medium text-white">{sheet.student_name}</TableCell>
                       <TableCell className="whitespace-nowrap font-mono text-xs">{sheet.registration_no}</TableCell>
-                      <TableCell className="whitespace-nowrap">{sheet.issued_on}</TableCell>
-                      <TableCell>{sheet.first_terminal}/100</TableCell>
-                      <TableCell>{examCourses[sheet.exam_course].modules.length === 1 ? "–" : `${sheet.second_terminal}/100`}</TableCell>
-                      <TableCell>{sheet.third_terminal == null ? "–" : `${sheet.third_terminal}/100`}</TableCell>
-                      <TableCell className="whitespace-nowrap">{score.pass ? "Pass" : "Fail"} · {score.percentage}%</TableCell>
+                      <TableCell className="whitespace-nowrap">{sheet.issued_on || "–"}</TableCell>
+                      <TableCell>{markLabel(sheet.first_terminal)}</TableCell>
+                      <TableCell>{moduleCount >= 2 ? markLabel(sheet.second_terminal) : "–"}</TableCell>
+                      <TableCell>{moduleCount >= 3 ? markLabel(sheet.third_terminal) : "–"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{score ? `${score.pass ? "Pass" : "Fail"} · ${score.percentage}%` : "Pending"}</TableCell>
                       <TableCell><div className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap">
                         <Button size="sm" aria-label="Edit Marksheet" title="Edit Marksheet" onClick={() => edit(sheet)} disabled={busy} className={`bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 ${actionStyle}`}><Edit className="h-4 w-4" /></Button>
                         <Button size="sm" aria-label="Print Marksheet" title="Print Marksheet" className={`bg-emerald-700 hover:bg-emerald-800 ${actionStyle}`} onClick={() => void outputMarksheet(sheet, true)}><Printer className="h-4 w-4" /></Button>
                         <Button size="sm" aria-label="Download PDF" title="Download PDF" onClick={() => void outputMarksheet(sheet)} className={`bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 ${actionStyle}`}><Download className="h-4 w-4" /></Button>
                         {sheet.certificate_ref ? <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
                           <Link to={`/print/${encodeURIComponent(sheet.certificate_ref)}`} aria-label="View Certificate" title="View Certificate"><FileBadge className="h-4 w-4" /></Link>
-                        </Button> : score.pass && sheet.registration_no.split("/").length === 3 && <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
+                        </Button> : score?.pass && sheet.issued_on && sheet.registration_no.split("/").length === 3 && <Button asChild size="sm" className={`bg-purple-700 hover:bg-purple-800 ${actionStyle}`}>
                           <Link to={`/generate?marksheet=${encodeURIComponent(sheet.id)}`} aria-label="Create Certificate" title="Create Certificate"><FilePlus className="h-4 w-4" /></Link>
                         </Button>}
                         {isAdmin() && <Button size="sm" disabled={busy} aria-label="Delete Marksheet" title="Delete Marksheet" className={`bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 ${actionStyle}`} onClick={() => setSheetToDelete(sheet)}><Trash2 className="h-4 w-4" /></Button>}
