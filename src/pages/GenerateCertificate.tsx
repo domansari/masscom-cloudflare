@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, FileText } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import QRCodeGenerator from "@/components/QRCodeGenerator";
@@ -16,6 +16,7 @@ import { CertificateData } from "@/types/certificate";
 
 const GenerateCertificate = () => {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const markSheetId = params.get("marksheet");
   const [readySheetId, setReadySheetId] = useState<string | null>(null);
   const [sheetError, setSheetError] = useState("");
@@ -130,8 +131,13 @@ const GenerateCertificate = () => {
     return `${prefix}-${year}-${random}`;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const canCreateMarksheet = Boolean(examCode && [formData.rollNo, batchNumber].every(
+    value => value.trim().length > 0 && value.trim().length <= 46 && /^[^/\x00-\x1f]+$/.test(value.trim()),
+  ));
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const createMarksheet = (e.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "marksheet";
+    if (isLoading || (createMarksheet && !canCreateMarksheet)) return;
     if (markSheetId && (readySheetId !== markSheetId || linkedCertificateId)) return;
     setIsLoading(true);
 
@@ -191,8 +197,12 @@ const GenerateCertificate = () => {
         throw new Error(result.error || "Failed to create certificate");
       }
 
-      if (markSheetId) {
+      if (markSheetId || createMarksheet) {
         const saved = await response.json();
+        if (createMarksheet) {
+          navigate(`/marksheets?certificate=${encodeURIComponent(saved.id)}&edit=1`);
+          return;
+        }
         setLinkedCertificateId(saved.id);
       }
 
@@ -412,6 +422,12 @@ const GenerateCertificate = () => {
                   </>
                 )}
               </Button>
+              {!markSheetId && <div className="space-y-2">
+                <Button type="submit" value="marksheet" variant="outline" disabled={isLoading || !canCreateMarksheet} className="w-full">
+                  Save &amp; Create Marksheet
+                </Button>
+                {!canCreateMarksheet && <p className="text-sm text-gray-200">Choose a course with a marksheet and enter a valid roll and batch number.</p>}
+              </div>}
             </form>
 
             {qrCodeData && (

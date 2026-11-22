@@ -398,7 +398,10 @@ const ManageCertificates = () => {
           </DialogHeader>
           {editingCertificate && (
             <>
+              <div className="flex flex-wrap gap-2">
                 <Button asChild variant="outline"><Link to={`/marksheets/manage?certificate=${encodeURIComponent(editingCertificate.id)}`}>View Marksheet</Link></Button>
+                <Button asChild variant="outline"><Link to={`/marksheets?certificate=${encodeURIComponent(editingCertificate.id)}&edit=1`}>Update Marksheet</Link></Button>
+              </div>
               <EditCertificateForm
                 certificate={editingCertificate}
                 onUpdate={handleUpdateCertificate}

@@ -16,6 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 type Sheet = PrintableMarksheet & { id: string; certificate_ref: string | null };
 type Certificate = { id: string; certificate_id: string; student_name: string; roll_no?: string; batch_number?: string; course_name: string };
+type LinkedCertificate = Certificate & { father_name?: string | null; completion_date?: string };
 const sortColumns = [
   ["student_name", "Student Name"],
   ["registration_no", "Registration No."],
@@ -45,10 +46,12 @@ async function request(method = "GET", id?: string, body?: object) {
 export default function MarkSheets({ manage = false }: { manage?: boolean }) {
   const [params] = useSearchParams();
   const certificateId = params.get("certificate");
-  return <MarkSheetWorkspace key={certificateId ?? (manage ? "manage" : "create")} manage={manage} certificateId={certificateId} />;
+  const editLinked = Boolean(certificateId && params.get("edit") === "1");
+  const workspaceKey = certificateId ? `${certificateId}:${editLinked}` : manage ? "manage" : "create";
+  return <MarkSheetWorkspace key={workspaceKey} manage={manage} certificateId={certificateId} editLinked={editLinked} />;
 }
 
-function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certificateId: string | null }) {
+function MarkSheetWorkspace({ manage, certificateId, editLinked }: { manage: boolean; certificateId: string | null; editLinked: boolean }) {
   const { isAdmin } = useAuth();
   const navigate = useNavigate();
   const showSaved = manage || Boolean(certificateId);
@@ -57,10 +60,11 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
   const [ascending, setAscending] = useState(false);
   const [page, setPage] = useState(1);
   const [loadError, setLoadError] = useState("");
-  const previewOnly = Boolean(certificateId);
+  const previewOnly = Boolean(certificateId) && !editLinked;
   const [loading, setLoading] = useState(true);
   const [sheets, setSheets] = useState<Sheet[]>([]);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [linkedCertificate, setLinkedCertificate] = useState<LinkedCertificate | null>(null);
   const [editingCourse, setEditingCourse] = useState<keyof typeof examCourses>("dca");
   const terminals = examCourses[editingCourse].modules;
   const [form, setForm] = useState(emptyForm);
@@ -123,12 +127,54 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
   }
 
   useEffect(() => {
-    if (!showSaved) return;
+    if (!showSaved || editLinked) return;
     refresh().catch((error: Error) => setLoadError(error.message)).finally(() => setLoading(false));
-  }, [showSaved]);
+  }, [showSaved, editLinked]);
 
   useEffect(() => {
-    if (previewOnly || (manage && !editing)) return;
+    if (!editLinked || !certificateId) return;
+    const controller = new AbortController();
+    async function loadLinkedForm() {
+      const [response, marksheets] = await Promise.all([
+        fetch(`/api/certificates/${encodeURIComponent(certificateId)}`, { signal: controller.signal }),
+        request(),
+      ]);
+      if (!response.ok) throw new Error("Unable to load the certificate.");
+      const { data: certificate } = await response.json() as { data: LinkedCertificate };
+      if (controller.signal.aborted) return;
+      const course = examCourseCode(certificate.course_name);
+      const roll = certificate.roll_no?.trim() ?? "";
+      const batch = certificate.batch_number?.trim() ?? "";
+      if (!course || [roll, batch].some(value => !value || value.length > 46 || !/^[^/\x00-\x1f]+$/.test(value))) {
+        throw new Error("Update the certificate with a supported course, valid roll number and batch code before saving a marksheet.");
+      }
+      const sheet = (marksheets.data as Sheet[]).find(item => item.certificate_ref === certificateId);
+      if (sheet && sheet.exam_course !== course) {
+        throw new Error("The linked marksheet and certificate have different courses. Set the certificate course to the marksheet course before updating it.");
+      }
+      if (sheet) edit(sheet);
+      setEditingCourse(course);
+      setForm(current => ({
+        ...current,
+        roll_no: roll,
+        batch_code: batch,
+        certificate_ref: certificate.id,
+        student_name: certificate.student_name,
+        father_name: sheet ? current.father_name : certificate.father_name ?? "",
+        year: sheet ? current.year : certificate.completion_date?.slice(0, 4) ?? "",
+      }));
+      setLinkedCertificate(certificate);
+    }
+    loadLinkedForm().catch((error: Error) => {
+      if (!controller.signal.aborted) setLoadError(error.message);
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
+    return () => controller.abort();
+  }, [editLinked, certificateId]);
+
+  useEffect(() => {
+    if (certificateId || (manage && !editing)) return;
     let active = true;
     fetch("/api/certificates").then(async response => {
       if (!response.ok) throw new Error("Could not load certificates for linking.");
@@ -138,7 +184,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
 
     }).catch((error: Error) => { if (active) setNotice(error.message); });
     return () => { active = false; };
-  }, [previewOnly, manage, editing]);
+  }, [certificateId, manage, editing]);
 
   function edit(sheet: Sheet) {
     setNotice("");
@@ -184,6 +230,10 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
     setBusy(true);
     try {
       const saved = await request(method, id, values);
+      if (editLinked) {
+        navigate(`/marksheets/manage?certificate=${encodeURIComponent(certificateId)}`, { replace: true });
+        return;
+      }
       if (createCertificate) {
         navigate(`/generate?marksheet=${encodeURIComponent(saved.id)}`);
         return;
@@ -200,6 +250,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy || (editLinked && !linkedCertificate)) return;
     const createCertificate = (event.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "certificate";
     void change(editing ? "PUT" : "POST", editing, {
       ...form, exam_course: editingCourse, ...Object.fromEntries(terminals.map(([field]) => [field, Number(form[field])])),
@@ -237,7 +288,7 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
         <p>Passing requires at least 33 out of 100 in each required exam.</p>
         <form className={`grid gap-4 sm:grid-cols-2 ${!showSaved ? "text-white [&_input]:border-white/30 [&_input]:bg-white/20 [&_input]:text-white [&_input[type=date]]:[color-scheme:dark]" : ""}`} onSubmit={save}>
           <label className="sm:col-span-2">Course
-            <Select value={editingCourse} disabled={Boolean(editing)} onValueChange={(code: keyof typeof examCourses) => {
+            <Select value={editingCourse} disabled={Boolean(editing) || editLinked} onValueChange={(code: keyof typeof examCourses) => {
               setEditingCourse(code);
               setForm(current => ({ ...current, first_terminal: "", second_terminal: "", third_terminal: "", certificate_ref: "" }));
             }}>
@@ -247,20 +298,20 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
               </SelectContent>
             </Select>
           </label>
-          <label>Roll No.<Input required maxLength={46} pattern="[^/]+" value={form.roll_no} onChange={e => setForm({ ...form, roll_no: e.target.value, certificate_ref: "" })} /></label>
-          <label>Batch Code<Input required maxLength={46} pattern="[^/]+" value={form.batch_code} onChange={e => setForm({ ...form, batch_code: e.target.value, certificate_ref: "" })} /></label>
+          <label>Roll No.<Input required readOnly={editLinked} maxLength={46} pattern="[^/]+" value={form.roll_no} onChange={e => setForm({ ...form, roll_no: e.target.value, certificate_ref: "" })} /></label>
+          <label>Batch Code<Input required readOnly={editLinked} maxLength={46} pattern="[^/]+" value={form.batch_code} onChange={e => setForm({ ...form, batch_code: e.target.value, certificate_ref: "" })} /></label>
           <label>Year<Input required inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={form.year} onChange={e => setForm({ ...form, year: e.target.value })} /></label>
-          <label>Student name<Input required maxLength={150} value={form.student_name} onChange={e => setForm({ ...form, student_name: e.target.value, certificate_ref: "" })} /></label>
+          <label>Student name<Input required readOnly={editLinked} maxLength={150} value={form.student_name} onChange={e => setForm({ ...form, student_name: e.target.value, certificate_ref: "" })} /></label>
           <label className="sm:col-span-2">Father’s Name
             <Input maxLength={150} value={form.father_name} onChange={event => setForm({ ...form, father_name: event.target.value })} />
           </label>
           <p className="sm:col-span-2">Registration No. {form.roll_no || "Roll No."}/{form.batch_code || "Batch Code"}/{form.year || "Year"}</p>
-          <label>Link to certificate
+          {!editLinked && <label>Link to certificate
             <select className={`block w-full rounded-md border p-2 ${showSaved ? "bg-white" : "border-white/30 bg-white/20 text-white [&>option]:bg-slate-900"}`} value={form.certificate_ref} onChange={e => setForm({ ...form, certificate_ref: e.target.value })}>
               <option value="">No certificate linked</option>
               {matchingCertificates.map(certificate => <option key={certificate.id} value={certificate.id}>{certificate.certificate_id}</option>)}
             </select>
-          </label>
+          </label>}
           <label>Date of issue<Input required type="date" value={form.issued_on} onChange={e => setForm({ ...form, issued_on: e.target.value })} /></label>
           {terminals.map(([field, label, modules]) => (
             <label key={field}>{label} · Max 100 · Passing {passingMark}<Input required type="number" min={0} max={100} step={1} value={form[field]} onChange={e => setForm({ ...form, [field]: e.target.value })} /><small>{modules}</small></label>
@@ -269,11 +320,29 @@ function MarkSheetWorkspace({ manage, certificateId }: { manage: boolean; certif
           <div className="flex flex-wrap gap-2 sm:col-span-2">
             <Button type="submit" disabled={busy} className={showSaved ? undefined : "bg-blue-600 text-white hover:bg-blue-700"}>{editing ? "Save changes" : "Create mark sheet"}</Button>
             {!certificateId && !form.certificate_ref && <Button type="submit" value="certificate" variant="outline" className={showSaved ? undefined : "border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"} disabled={busy || !preview?.pass || matchingCertificates.length > 0}>Save &amp; Create Certificate</Button>}
-            {editing && <Button type="button" variant="outline" onClick={reset}>Cancel edit</Button>}
+            {editing && !editLinked && <Button type="button" variant="outline" onClick={reset}>Cancel edit</Button>}
           </div>
         </form>
     </>
   );
+
+  if (editLinked) {
+    return (
+      <main className="mx-auto max-w-3xl space-y-4 px-4 py-8">
+        <Link className="text-white underline" to="/manage">Back to Manage Certificates</Link>
+        <Card>
+          <CardHeader>
+            <CardTitle>{loading ? "Linked Marksheet" : editing ? "Update Marksheet" : "Create Marksheet"}</CardTitle>
+            {linkedCertificate && <CardDescription>Certificate {linkedCertificate.certificate_id}</CardDescription>}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loading ? <p role="status">Loading certificate and marksheet…</p> : loadError ? <p role="alert">{loadError}</p> : formContent}
+            {notice && <p role="status">{notice}</p>}
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
 
   if (!showSaved) {
     return (
