@@ -17,12 +17,13 @@ function normalize(data) {
   const date = typeof data.payment_date === "string" ? data.payment_date.trim() : "";
   const period = typeof data.period === "string" ? data.period.trim() : "";
   const notes = typeof data.notes === "string" ? data.notes.trim() : "";
+  const upiReference = typeof data.upi_reference_number === "string" ? data.upi_reference_number.trim() : "";
   if (!categories.includes(category) || !methods.includes(method) ||
       !Number.isFinite(amount) || amount <= 0 || amount > 100000000 ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(date) || period.length > 40 || notes.length > 500) return null;
+      !/^\d{4}-\d{2}-\d{2}$/.test(date) || period.length > 40 || notes.length > 500 || upiReference.length > 120 || (method === "UPI" && !upiReference)) return null;
   const parsed = new Date(date + "T00:00:00.000Z");
   if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) return null;
-  return { fee_category: category, payment_method: method, amount, payment_date: date, period: period || null, notes: notes || null };
+  return { fee_category: category, payment_method: method, upi_reference_number: method === "UPI" ? upiReference : null, amount, payment_date: date, period: period || null, notes: notes || null };
 }
 
 export async function onRequest({ request, env }) {
@@ -69,18 +70,18 @@ export async function onRequest({ request, env }) {
       await env.DB.prepare(
         `INSERT INTO fee_payments
          (id, receipt_no, student_id, student_name, enrollment_no, fee_category, amount, payment_date,
-          payment_method, period, notes, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          payment_method, upi_reference_number, period, notes, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(id, receiptNo, student.id, student.student_name, buildEnrollmentNo(student), payment.fee_category,
-        payment.amount, payment.payment_date, payment.payment_method, payment.period, payment.notes, account.adminId).run();
+        payment.amount, payment.payment_date, payment.payment_method, payment.upi_reference_number, payment.period, payment.notes, account.adminId).run();
       return json({ success: true, id, receipt_no: receiptNo }, 201);
     }
 
     await env.DB.prepare(
       `UPDATE fee_payments SET fee_category = ?, amount = ?, payment_date = ?,
-       payment_method = ?, period = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+       payment_method = ?, upi_reference_number = ?, period = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).bind(payment.fee_category, payment.amount, payment.payment_date, payment.payment_method,
-      payment.period, payment.notes, id).run();
+      payment.upi_reference_number, payment.period, payment.notes, id).run();
     const updated = await env.DB.prepare("SELECT id FROM fee_payments WHERE id = ?").bind(id).first();
     return updated ? json({ success: true, id }) : json({ error: "Fee record not found" }, 404);
   } catch (error) {

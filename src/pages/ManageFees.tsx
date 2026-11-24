@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { ArrowLeft, IndianRupee, Pencil, Search, X } from "lucide-react";
+import { ArrowLeft, Eye, IndianRupee, Pencil, Printer, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,12 +18,12 @@ type Student = {
 type FeePayment = {
   id: string; receipt_no: string; student_id: string | null; student_name: string;
   enrollment_no: string | null; fee_category: string; amount: number; payment_date: string;
-  payment_method: string; period: string | null; notes: string | null;
+  payment_method: string; upi_reference_number: string | null; period: string | null; notes: string | null;
 };
-type FeeReceipt = { receipt_no: string; student_name: string; enrollment_no: string; fee_category: string; amount: number; payment_date: string; payment_method: string; period: string; notes: string };
+type FeeReceipt = { receipt_no: string; student_name: string; enrollment_no: string; fee_category: string; amount: number; payment_date: string; payment_method: string; upi_reference_number: string; period: string; notes: string };
 type FormState = {
   student_id: string; fee_category: string; amount: string; payment_date: string;
-  payment_method: string; period: string; notes: string;
+  payment_method: string; upi_reference_number: string; period: string; notes: string;
 };
 const categories = ["Monthly Fee", "Admission Fee", "Reexam Fee", "Certificate Issue Fee", "Other"];
 const methods = ["Cash", "UPI"];
@@ -31,7 +31,7 @@ const today = new Date();
 const todayInput = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
 const freshForm = (): FormState => ({
   student_id: "", fee_category: "Monthly Fee", amount: "", payment_date: todayInput,
-  payment_method: "Cash", period: "", notes: "",
+  payment_method: "Cash", upi_reference_number: "", period: "", notes: "",
 });
 const currency = (value: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(value);
 
@@ -54,6 +54,8 @@ export default function ManageFees() {
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [receiptForPrint, setReceiptForPrint] = useState<FeeReceipt | null>(null);
+  const [receiptForView, setReceiptForView] = useState<FeeReceipt | null>(null);
+  const [deletingId, setDeletingId] = useState("");
 
   const loadData = async () => {
     setLoading(true);
@@ -93,7 +95,7 @@ export default function ManageFees() {
     const query = search.trim().toLowerCase();
     if (!query) return payments;
     return payments.filter(payment =>
-      [payment.receipt_no, payment.student_name, payment.enrollment_no, payment.fee_category, payment.payment_method]
+      [payment.receipt_no, payment.student_name, payment.enrollment_no, payment.fee_category, payment.payment_method, payment.upi_reference_number]
         .some(value => String(value || "").toLowerCase().includes(query))
     );
   }, [payments, search]);
@@ -111,9 +113,26 @@ export default function ManageFees() {
     setForm({
       student_id: payment.student_id || "", fee_category: payment.fee_category,
       amount: String(payment.amount), payment_date: payment.payment_date,
-      payment_method: payment.payment_method, period: payment.period || "", notes: payment.notes || "",
+      payment_method: payment.payment_method, upi_reference_number: payment.upi_reference_number || "", period: payment.period || "", notes: payment.notes || "",
     });
     setActiveTab("collect");
+  };
+
+  const receiptFromPayment = (payment: FeePayment): FeeReceipt => ({ receipt_no: payment.receipt_no, student_name: payment.student_name, enrollment_no: payment.enrollment_no || "", fee_category: payment.fee_category, amount: payment.amount, payment_date: payment.payment_date, payment_method: payment.payment_method, upi_reference_number: payment.upi_reference_number || "", period: payment.period || "", notes: payment.notes || "" });
+
+  const deletePayment = async (payment: FeePayment) => {
+    if (!window.confirm(`Delete receipt ${payment.receipt_no} for ${payment.student_name}?`)) return;
+    const password = window.prompt("Enter your admin password to delete this fee receipt.");
+    if (password === null) return;
+    setDeletingId(payment.id);
+    try {
+      const response = await fetch("/api/fees?id=" + encodeURIComponent(payment.id), { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }) });
+      await readJson(response);
+      setPayments(current => current.filter(item => item.id !== payment.id));
+      toast({ title: "Receipt deleted", description: payment.receipt_no });
+    } catch (error) {
+      toast({ title: "Could not delete receipt", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    } finally { setDeletingId(""); }
   };
 
   const submit = async (event: FormEvent) => {
@@ -143,6 +162,7 @@ export default function ManageFees() {
             amount: Number(form.amount),
             payment_date: form.payment_date,
             payment_method: form.payment_method,
+            upi_reference_number: form.upi_reference_number,
             period: form.period,
             notes: form.notes,
           });
@@ -172,6 +192,7 @@ export default function ManageFees() {
                 <tr><td style={{ border: "1px solid #777", padding: "3mm", width: "25%" }}>Student Name</td><td style={{ border: "1px solid #777", padding: "3mm", width: "40%" }}>{receiptForPrint.student_name}</td><td style={{ border: "1px solid #777", padding: "3mm", width: "16%" }}>Date</td><td style={{ border: "1px solid #777", padding: "3mm" }}>{formatIndianDate(receiptForPrint.payment_date)}</td></tr>
                 <tr><td style={{ border: "1px solid #777", padding: "3mm" }}>Enrollment No.</td><td style={{ border: "1px solid #777", padding: "3mm" }}>{receiptForPrint.enrollment_no || "—"}</td><td style={{ border: "1px solid #777", padding: "3mm" }}>Payment</td><td style={{ border: "1px solid #777", padding: "3mm" }}>{receiptForPrint.payment_method}</td></tr>
                 <tr><td style={{ border: "1px solid #777", padding: "3mm" }}>Fee Head</td><td style={{ border: "1px solid #777", padding: "3mm" }}>{receiptForPrint.fee_category}</td><td style={{ border: "1px solid #777", padding: "3mm" }}>Period</td><td style={{ border: "1px solid #777", padding: "3mm" }}>{receiptForPrint.period || "—"}</td></tr>
+                {receiptForPrint.payment_method === "UPI" && <tr><td style={{ border: "1px solid #777", padding: "3mm" }}>UPI Reference No.</td><td colSpan={3} style={{ border: "1px solid #777", padding: "3mm" }}>{receiptForPrint.upi_reference_number || "—"}</td></tr>}
                 <tr><td style={{ border: "1px solid #777", padding: "3mm" }}>Notes</td><td colSpan={3} style={{ border: "1px solid #777", padding: "3mm" }}>{receiptForPrint.notes || "—"}</td></tr>
               </tbody>
             </table>
@@ -183,6 +204,13 @@ export default function ManageFees() {
             </div>
           </section>
         ))}
+      </div>}
+      {receiptForView && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setReceiptForView(null); }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="receipt-view-title" className="w-full max-w-xl rounded-xl border border-white/20 bg-slate-900 p-6 text-white shadow-2xl">
+          <div className="mb-5 flex items-start justify-between gap-4"><div><h2 id="receipt-view-title" className="text-xl font-bold">Fee Receipt</h2><p className="text-sm text-gray-300">{receiptForView.receipt_no}</p></div><Button type="button" variant="outline" size="icon" aria-label="Close receipt" onClick={() => setReceiptForView(null)}><X className="h-4 w-4" /></Button></div>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm"><dt className="text-gray-300">Student</dt><dd>{receiptForView.student_name}</dd><dt className="text-gray-300">Enrollment No.</dt><dd>{receiptForView.enrollment_no || "—"}</dd><dt className="text-gray-300">Date</dt><dd>{formatIndianDate(receiptForView.payment_date)}</dd><dt className="text-gray-300">Fee Type</dt><dd>{receiptForView.fee_category}</dd><dt className="text-gray-300">Payment Method</dt><dd>{receiptForView.payment_method}</dd>{receiptForView.payment_method === "UPI" && <><dt className="text-gray-300">UPI Reference No.</dt><dd>{receiptForView.upi_reference_number || "—"}</dd></>}<dt className="text-gray-300">Period</dt><dd>{receiptForView.period || "—"}</dd><dt className="text-gray-300">Amount</dt><dd className="font-semibold">{currency(receiptForView.amount)}</dd><dt className="text-gray-300">Notes</dt><dd>{receiptForView.notes || "—"}</dd></dl>
+          <div className="mt-6 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setReceiptForView(null)}>Close</Button><Button type="button" onClick={() => { setReceiptForPrint(receiptForView); setReceiptForView(null); }}><Printer className="mr-2 h-4 w-4" />Print Receipt</Button></div>
+        </section>
       </div>}
       <div className="absolute inset-0 bg-black/40" />
       <main className="container relative z-10 mx-auto max-w-6xl px-4 py-8 sm:py-10">
@@ -240,10 +268,14 @@ export default function ManageFees() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="fee-method">Payment Method *</Label>
-                    <select id="fee-method" required value={form.payment_method} onChange={event => updateField("payment_method", event.target.value)} className="h-10 w-full rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white">
+                    <select id="fee-method" required value={form.payment_method} onChange={event => { updateField("payment_method", event.target.value); if (event.target.value !== "UPI") updateField("upi_reference_number", ""); }} className="h-10 w-full rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white">
                       {methods.map(item => <option key={item} className="text-slate-900">{item}</option>)}
                     </select>
                   </div>
+                  {form.payment_method === "UPI" && <div className="space-y-2">
+                    <Label htmlFor="fee-upi-reference">UPI Reference Number *</Label>
+                    <Input id="fee-upi-reference" required maxLength={120} value={form.upi_reference_number} onChange={event => updateField("upi_reference_number", event.target.value)} placeholder="Enter UPI transaction/reference number" className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
+                  </div>}
                   <div className="space-y-2">
                     <Label htmlFor="fee-period">Month / Period</Label>
                     <Input id="fee-period" maxLength={40} placeholder="For example, November 2026" value={form.period} onChange={event => updateField("period", event.target.value)} className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
@@ -288,7 +320,7 @@ export default function ManageFees() {
                       <td className="px-3 py-3">{payment.fee_category}{payment.period ? <div className="text-xs text-gray-300">{payment.period}</div> : null}</td>
                       <td className="px-3 py-3">{payment.payment_method}</td>
                       <td className="px-3 py-3 text-right font-semibold">{currency(payment.amount)}</td>
-                      <td className="px-3 py-3"><Button type="button" variant="outline" size="sm" onClick={() => editPayment(payment)}><Pencil className="mr-2 h-4 w-4" />Edit</Button></td>
+                      <td className="px-3 py-3"><div className="flex flex-wrap gap-1.5"><Button type="button" variant="outline" size="sm" onClick={() => setReceiptForView(receiptFromPayment(payment))}><Eye className="mr-1.5 h-4 w-4" />View</Button><Button type="button" variant="outline" size="sm" onClick={() => setReceiptForPrint(receiptFromPayment(payment))}><Printer className="mr-1.5 h-4 w-4" />Print</Button><Button type="button" variant="outline" size="sm" onClick={() => editPayment(payment)}><Pencil className="mr-1.5 h-4 w-4" />Edit</Button><Button type="button" variant="destructive" size="sm" disabled={deletingId === payment.id} onClick={() => void deletePayment(payment)}><Trash2 className="mr-1.5 h-4 w-4" />{deletingId === payment.id ? "Deleting…" : "Delete"}</Button></div></td>
                     </tr>)}</tbody>
                   </table></div>
                 )}
