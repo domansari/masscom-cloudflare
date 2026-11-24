@@ -159,7 +159,7 @@ export default function ManageFees() {
 
   return (
     <div className="relative min-h-screen overflow-hidden">
-      <style>{".fee-receipt-print{display:none}@page{size:A4;margin:10mm}@media print{body{background:#fff!important}body *{visibility:hidden!important}.fee-receipt-print,.fee-receipt-print *{visibility:visible!important}.fee-receipt-print{display:flex!important;position:fixed;inset:0;width:190mm;height:277mm;flex-direction:column;background:#fff;color:#111;font-family:Arial,sans-serif}.fee-receipt-copy{box-sizing:border-box;height:138.5mm;flex:1 1 50%;padding:7mm 8mm;border-bottom:1px dashed #777;page-break-inside:avoid}.fee-receipt-copy:last-child{border-bottom:0}}"}
+      <style>{".fee-receipt-print{display:none}@page{size:A4;margin:10mm}@media print{body{background:#fff!important}body *{visibility:hidden!important}.fee-receipt-print,.fee-receipt-print *{visibility:visible!important}.fee-receipt-print{display:flex!important;position:fixed;inset:0;width:190mm;height:277mm;flex-direction:column;background:#fff;color:#111;font-family:Arial,sans-serif}.fee-receipt-copy{box-sizing:border-box;height:138.5mm;flex:1 1 50%;padding:7mm 8mm;border-bottom:1px dashed #777;page-break-inside:avoid}.fee-receipt-copy:last-child{border-bottom:0}}"}</style>
       {receiptForPrint && <div className="fee-receipt-print">
         {(["STUDENT COPY", "OFFICE COPY"] as const).map(copy => (
           <section className="fee-receipt-copy" key={copy}>
