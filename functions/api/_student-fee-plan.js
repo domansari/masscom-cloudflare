@@ -108,21 +108,30 @@ function paymentMatches(item, payment, studentId) {
 
 export async function getStudentFeePlan(env, student, { ensure = true } = {}) {
   if (ensure) await ensureStudentFeePlan(env, student);
-  const [itemResult, paymentResult] = await Promise.all([
+  const [itemResult, paymentResult, allocationResult] = await Promise.all([
     env.DB.prepare(
       "SELECT * FROM student_fee_plan_items WHERE student_id = ? AND is_active = 1 ORDER BY due_date, created_at, id"
     ).bind(student.id).all(),
     env.DB.prepare(
       "SELECT id, receipt_no, student_id, fee_plan_item_id, fee_category, amount, payment_date, period FROM fee_payments WHERE student_id = ? ORDER BY payment_date, created_at"
     ).bind(student.id).all(),
+    env.DB.prepare(
+      "SELECT a.fee_plan_item_id, p.id, p.receipt_no, a.amount, p.payment_date, p.period FROM student_fee_payment_allocations a JOIN fee_payments p ON p.id = a.payment_id WHERE p.student_id = ? ORDER BY p.payment_date, p.created_at"
+    ).bind(student.id).all(),
   ]);
   const today = indiaToday();
   const payments = paymentResult.results || [];
+  const allocations = allocationResult.results || [];
   const items = (itemResult.results || []).map(item => {
-    const receipts = payments.filter(payment => paymentMatches(item, payment, student.id)).map(payment => ({
+    const directReceipts = payments.filter(payment => paymentMatches(item, payment, student.id)).map(payment => ({
       id: payment.id, receipt_no: payment.receipt_no, amount: Number(payment.amount),
       payment_date: payment.payment_date, period: payment.period || "",
     }));
+    const allocatedReceipts = allocations.filter(allocation => allocation.fee_plan_item_id === item.id).map(allocation => ({
+      id: allocation.id, receipt_no: allocation.receipt_no, amount: Number(allocation.amount),
+      payment_date: allocation.payment_date, period: allocation.period || "",
+    }));
+    const receipts = [...directReceipts, ...allocatedReceipts];
     const paid = receipts.reduce((sum, receipt) => sum + receipt.amount, 0);
     const waived = Number(item.is_waived) === 1;
     const amount = Number(item.amount) || 0;

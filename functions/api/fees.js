@@ -66,7 +66,31 @@ export async function onRequest({ request, env }) {
       if (!student) return json({ error: "Student not found." }, 404);
       if (!student.is_active) return json({ error: "Restore this student before collecting a fee." }, 409);
       const planItemId = typeof data.fee_plan_item_id === "string" ? data.fee_plan_item_id.trim() : "";
-      if (planItemId) {
+      const allocationIds = Array.isArray(data.fee_plan_item_ids)
+        ? [...new Set(data.fee_plan_item_ids.filter(value => typeof value === "string").map(value => value.trim()).filter(Boolean))]
+        : [];
+      if (allocationIds.length > 200 || (planItemId && allocationIds.length)) return json({ error: "Select a valid set of fee plan installments." }, 400);
+      let allocations = [];
+      if (allocationIds.length) {
+        const planItems = await Promise.all(allocationIds.map(itemId => env.DB.prepare(
+          "SELECT * FROM student_fee_plan_items WHERE id = ? AND student_id = ? AND is_active = 1"
+        ).bind(itemId, studentId).first()));
+        if (planItems.some(item => !item || Number(item.is_waived))) return json({ error: "One or more selected fee plan items are no longer payable." }, 409);
+        allocations = await Promise.all(planItems.map(async item => {
+          const totals = await env.DB.prepare(
+            `SELECT
+              COALESCE((SELECT SUM(amount) FROM fee_payments WHERE fee_plan_item_id = ?), 0) +
+              COALESCE((SELECT SUM(a.amount) FROM student_fee_payment_allocations a JOIN fee_payments p ON p.id = a.payment_id WHERE a.fee_plan_item_id = ?), 0) AS paid`
+          ).bind(item.id, item.id).first();
+          const remaining = Math.max(0, Number(item.amount) - Number(totals?.paid || 0));
+          return { item, amount: remaining };
+        }));
+        allocations = allocations.filter(allocation => allocation.amount > 0.001);
+        const allocationTotal = allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
+        if (!allocations.length || Math.abs(allocationTotal - payment.amount) > 0.01) {
+          return json({ error: "The payment amount must equal the remaining balance of the selected installments." }, 400);
+        }
+      } else if (planItemId) {
         const planItem = await env.DB.prepare("SELECT * FROM student_fee_plan_items WHERE id = ? AND student_id = ? AND is_active = 1").bind(planItemId, studentId).first();
         if (!planItem || Number(planItem.is_waived) || planItem.fee_category !== payment.fee_category || (planItem.period || "") !== (payment.period || "")) {
           return json({ error: "That fee plan item is invalid, inactive, or does not match the payment." }, 409);
@@ -78,17 +102,31 @@ export async function onRequest({ request, env }) {
       }
       const id = crypto.randomUUID();
       const receiptNo = "FEE-" + new Date().getFullYear() + "-" + id.slice(0, 8).toUpperCase();
-      await env.DB.prepare(
+      const insertPayment = env.DB.prepare(
         `INSERT INTO fee_payments
          (id, receipt_no, student_id, student_name, enrollment_no, fee_category, amount, payment_date,
           payment_method, upi_reference_number, fee_plan_item_id, period, notes, created_by)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(id, receiptNo, student.id, student.student_name, buildEnrollmentNo(student), payment.fee_category,
-        payment.amount, payment.payment_date, payment.payment_method, payment.upi_reference_number, planItemId || null, payment.period, payment.notes, account.adminId).run();
-      return json({ success: true, id, receipt_no: receiptNo }, 201);
+        payment.amount, payment.payment_date, payment.payment_method, payment.upi_reference_number,
+        planItemId || null, payment.period, payment.notes, account.adminId);
+      if (allocations.length) {
+        const statements = [insertPayment, ...allocations.map(allocation => env.DB.prepare(
+          "INSERT INTO student_fee_payment_allocations (id, payment_id, fee_plan_item_id, amount) VALUES (?, ?, ?, ?)"
+        ).bind(crypto.randomUUID(), id, allocation.item.id, allocation.amount))];
+        await env.DB.batch(statements);
+      } else await insertPayment.run();
+      return json({ success: true, id, receipt_no: receiptNo, allocations: allocations.map(({ item, amount }) => ({ description: item.description, period: item.period, amount })) }, 201);
     }
 
     const linkedPayment = await env.DB.prepare("SELECT id, student_id, fee_plan_item_id FROM fee_payments WHERE id = ?").bind(id).first();
+    const allocationsForPayment = await env.DB.prepare("SELECT COUNT(*) AS count FROM student_fee_payment_allocations WHERE payment_id = ?").bind(id).first();
+    if (Number(allocationsForPayment?.count || 0) > 0) {
+      const original = await env.DB.prepare("SELECT amount, fee_category FROM fee_payments WHERE id = ?").bind(id).first();
+      if (!original || Number(original.amount) !== payment.amount || original.fee_category !== payment.fee_category) {
+        return json({ error: "The total or fee type of an allocated receipt cannot be changed. Delete it and collect again if needed." }, 409);
+      }
+    }
     if (linkedPayment?.fee_plan_item_id) {
       const planItem = await env.DB.prepare("SELECT * FROM student_fee_plan_items WHERE id = ? AND student_id = ? AND is_active = 1").bind(linkedPayment.fee_plan_item_id, linkedPayment.student_id).first();
       if (!planItem || Number(planItem.is_waived) || planItem.fee_category !== payment.fee_category || (planItem.period || "") !== (payment.period || "")) {
@@ -111,6 +149,7 @@ export async function onRequest({ request, env }) {
     if (error instanceof SyntaxError) return json({ error: "Invalid request" }, 400);
     const message = String(error?.message || "");
     if (/no such table: fee_payments/i.test(message)) return json({ error: "Fee database update is required. Apply the fee payment migration in D1, then try again." }, 503);
+    if (/no such table: student_fee_payment_allocations/i.test(message)) return json({ error: "Advance payment database update is required. Apply migrations/0017_fee_payment_allocations.sql in D1, then try again." }, 503);
     if (/no such table: student_fee_plan_items|no such column: fee_plan_item_id/i.test(message)) return json({ error: "Fee plan database update is required. Apply migrations/0016_fee_plan.sql in D1, then try again." }, 503);
     return json({ error: "Unable to complete the fee request" }, 500);
   }

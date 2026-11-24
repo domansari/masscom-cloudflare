@@ -62,6 +62,9 @@ export async function onRequest({ request, env }) {
   } catch (error) {
     if (error instanceof SyntaxError) return json({ error: "Invalid request" }, 400);
     const message = String(error?.message || "");
+    if (/no such table: student_fee_payment_allocations/i.test(message)) {
+      return json({ error: "Advance payment database update is required. Apply migrations/0017_fee_payment_allocations.sql in D1." }, 503);
+    }
     if (/no such table: student_fee_plan_items/i.test(message)) {
       return json({ error: "Fee plan database update is required. Apply migrations/0016_fee_plan.sql in D1." }, 503);
     }

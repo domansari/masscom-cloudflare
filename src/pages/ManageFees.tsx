@@ -59,6 +59,7 @@ export default function ManageFees() {
   const [receiptForPrint, setReceiptForPrint] = useState<FeeReceipt | null>(null);
   const [receiptForView, setReceiptForView] = useState<FeeReceipt | null>(null);
   const [planItemId, setPlanItemId] = useState("");
+  const [planItemIds, setPlanItemIds] = useState<string[]>([]);
   const [deletingId, setDeletingId] = useState("");
 
   const loadData = async () => {
@@ -92,17 +93,31 @@ export default function ManageFees() {
   }, [searchParams, setSearchParams, payments, loading]);
 
   useEffect(() => {
-    const planItem = searchParams.get("plan_item_id"), studentId = searchParams.get("student_id");
-    if (!planItem || !studentId || loading || !students.length) return;
+    const studentId = searchParams.get("student_id");
+    const selectedIds = (searchParams.get("plan_item_ids") || "").split(",").map(value => value.trim()).filter(Boolean);
+    const singleItemId = searchParams.get("plan_item_id") || "";
+    if ((!selectedIds.length && !singleItemId) || !studentId || loading || !students.length) return;
     let active = true;
     fetch("/api/student-fee-plan?student_id=" + encodeURIComponent(studentId), { cache: "no-store" }).then(async response => {
       const result = await response.json(); if (!response.ok) throw new Error(result.error || "Unable to load fee plan."); return result.data;
     }).then(plan => {
       if (!active) return;
-      const item = (plan?.items || []).find((entry: { id: string }) => entry.id === planItem);
-      if (!item || item.is_waived || item.remaining_amount <= 0) throw new Error("This fee plan item is already paid or waived.");
-      setForm({ student_id: studentId, fee_category: item.fee_category, amount: String(item.remaining_amount), payment_date: todayInput, payment_method: "Cash", upi_reference_number: "", period: item.period || "", notes: "" });
-      setPlanItemId(item.id); setEditingId(""); setActiveTab("collect");
+      if (selectedIds.length) {
+        const chosen = selectedIds.map(id => (plan?.items || []).find((entry: { id: string }) => entry.id === id));
+        if (chosen.some(item => !item || item.is_waived || item.remaining_amount <= 0)) throw new Error("One or more selected installments are already paid or waived.");
+        const items = chosen as Array<{ id: string; fee_category: string; remaining_amount: number; period: string; description: string }>;
+        const categories = [...new Set(items.map(item => item.fee_category))];
+        const period = items.length === 1 ? items[0].period || "" : "Multiple installments";
+        const details = "Plan installments: " + items.map(item => [item.period || item.description, currency(item.remaining_amount)].join(" ")).join("; ");
+        setForm({ student_id: studentId, fee_category: categories.length === 1 ? categories[0] : "Other", amount: String(items.reduce((sum, item) => sum + item.remaining_amount, 0)), payment_date: todayInput, payment_method: "Cash", upi_reference_number: "", period, notes: details.slice(0, 490) });
+        setPlanItemId(""); setPlanItemIds(items.map(item => item.id));
+      } else {
+        const item = (plan?.items || []).find((entry: { id: string }) => entry.id === singleItemId);
+        if (!item || item.is_waived || item.remaining_amount <= 0) throw new Error("This fee plan item is already paid or waived.");
+        setForm({ student_id: studentId, fee_category: item.fee_category, amount: String(item.remaining_amount), payment_date: todayInput, payment_method: "Cash", upi_reference_number: "", period: item.period || "", notes: "" });
+        setPlanItemId(item.id); setPlanItemIds([]);
+      }
+      setEditingId(""); setActiveTab("collect");
       setSearchParams(new URLSearchParams(), { replace: true });
     }).catch(error => { if (active) toast({ title: "Could not open fee collection", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" }); });
     return () => { active = false; };
@@ -138,12 +153,14 @@ export default function ManageFees() {
     setForm(freshForm());
     setEditingId("");
     setPlanItemId("");
+    setPlanItemIds([]);
     setStudentSearch("");
   };
 
   const editPayment = (payment: FeePayment) => {
     setEditingId(payment.id);
     setPlanItemId(payment.fee_plan_item_id || "");
+    setPlanItemIds([]);
     setForm({
       student_id: payment.student_id || "", fee_category: payment.fee_category,
       amount: String(payment.amount), payment_date: payment.payment_date,
@@ -181,7 +198,7 @@ export default function ManageFees() {
       const response = await fetch(url, {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, fee_plan_item_id: planItemId || null }),
+        body: JSON.stringify({ ...form, fee_plan_item_id: planItemId || null, fee_plan_item_ids: planItemIds.length ? planItemIds : undefined }),
       });
       const result = await readJson(response);
       await loadData();
