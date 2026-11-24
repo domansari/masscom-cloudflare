@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { certificateCourseOptions } from "../../functions/api/_exam-courses.js";
+import StudentPreview from "./StudentPreview";
 
 type Student = {
   id: string; student_name: string; first_name: string | null; last_name: string | null;
@@ -76,7 +77,8 @@ export default function ManageStudents() {
   const [selectedPhotoPreview, setSelectedPhotoPreview] = useState<string | null>(null);
   const [form, setForm] = useState<StudentForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"new" | "manage">("new");
+  const [activeTab, setActiveTab] = useState<"new" | "manage" | "preview">("new");
+  const [previewStudentId, setPreviewStudentId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -209,6 +211,7 @@ export default function ManageStudents() {
     <div role="tablist" aria-label="Student sections" className="mb-6 inline-flex gap-1 rounded-lg border border-white/20 bg-black/20 p-1 shadow-sm backdrop-blur-lg">
       <button type="button" role="tab" id="new-student-tab" aria-selected={activeTab === "new"} aria-controls="new-student-panel" onClick={() => setActiveTab("new")} className={activeTab === "new" ? "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm" : "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15"}>New Student</button>
       <button type="button" role="tab" id="manage-students-tab" aria-selected={activeTab === "manage"} aria-controls="manage-students-panel" onClick={() => setActiveTab("manage")} className={activeTab === "manage" ? "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm" : "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15"}>Manage Students</button>
+      <button type="button" role="tab" id="preview-student-tab" aria-selected={activeTab === "preview"} aria-controls="preview-student-panel" onClick={() => setActiveTab("preview")} className={activeTab === "preview" ? "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm" : "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15"}>Preview</button>
     </div>
 
     {activeTab === "new" && <section role="tabpanel" id="new-student-panel" aria-labelledby="new-student-tab">
@@ -286,13 +289,17 @@ export default function ManageStudents() {
             <td className="px-3 py-3">{display(student.phone)}<div className="text-xs text-gray-300">{display(student.email)}</div></td>
             <td className="px-3 py-3"><span className={student.is_active ? "text-emerald-300" : "text-gray-300"}>{student.is_active ? "Active" : "Archived"}</span></td>
             <td className="px-3 py-3"><div className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap">
-              <Button asChild size="sm" aria-label={`Preview ${student.student_name}`} title="Preview Student" className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white shadow-lg transition-all duration-300 hover:scale-105"><a href={`/students/${encodeURIComponent(student.id)}/preview`} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4" /></a></Button>
+              <Button size="sm" aria-label={`Preview ${student.student_name}`} title="Preview Student" onClick={() => { setPreviewStudentId(student.id); setActiveTab("preview"); }} className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white shadow-lg transition-all duration-300 hover:scale-105"><Eye className="h-4 w-4" /></Button>
               {student.is_active && <Button size="sm" aria-label={`Edit ${student.student_name}`} title="Edit Student" onClick={() => edit(student)} className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white shadow-lg transition-all duration-300 hover:scale-105"><Edit className="h-4 w-4" /></Button>}
               {student.is_active ? <Button size="sm" aria-label={`Archive ${student.student_name}`} title="Archive Student" onClick={() => setActive(student, false)} className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800 text-white shadow-lg transition-all duration-300 hover:scale-105"><Archive className="h-4 w-4" /></Button> : <Button size="sm" aria-label={`Restore ${student.student_name}`} title="Restore Student" onClick={() => setActive(student, true)} className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 text-white shadow-lg transition-all duration-300 hover:scale-105"><RotateCcw className="h-4 w-4" /></Button>}
               <Button size="sm" aria-label={`Permanently delete ${student.student_name}`} title="Delete Student" onClick={() => { setStudentToDelete(student); setDeletePassword(""); setDeleteError(""); }} className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 text-white shadow-lg transition-all duration-300 hover:scale-105"><Trash2 className="h-4 w-4" /></Button>
             </div></td>
           </tr>)}</tbody></table></div>}
     </CardContent></Card>
+    </section>}
+
+    {activeTab === "preview" && <section role="tabpanel" id="preview-student-panel" aria-labelledby="preview-student-tab">
+      {previewStudentId ? <StudentPreview studentId={previewStudentId} embedded /> : <Card aria-label="Student preview is empty" className="min-h-64 border-white/20 bg-white/10 backdrop-blur-lg"><CardContent className="min-h-64" /></Card>}
     </section>}
     </main>
     <Dialog open={Boolean(studentToDelete)} onOpenChange={open => { if (!open && !deleting) { setStudentToDelete(null); setDeletePassword(""); setDeleteError(""); } }}>
