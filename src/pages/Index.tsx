@@ -1,7 +1,147 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useEffect, useState } from "react";
-import { Clock, Database, FileText, IndianRupee, Shield, Users, type LucideIcon } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { AlertCircle, CalendarClock, Clock, Database, FileText, IndianRupee, MessageCircle, RefreshCw, Shield, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+
+type FeeDue = {
+  student_id: string;
+  student_name: string;
+  father_name: string;
+  phone: string;
+  roll_no: string;
+  course_name: string;
+  fee_category: string;
+  period: string;
+  due_date: string;
+  remaining_amount: number;
+};
+
+type FeeSummary = {
+  today: string;
+  today_collection: number;
+  today_receipts: number;
+  month_collection: number;
+  month_receipts: number;
+  overdue_amount: number;
+  overdue_students: number;
+  overdue_items: FeeDue[];
+  upcoming_amount: number;
+  upcoming_students: number;
+  upcoming_items: FeeDue[];
+};
+
+const currency = (amount: number) => new Intl.NumberFormat("en-IN", {
+  style: "currency", currency: "INR", maximumFractionDigits: 2,
+}).format(amount);
+
+function whatsappReminder(item: FeeDue) {
+  const digits = item.phone.replace(/\D/g, "").replace(/^0+/, "");
+  const phone = digits.length === 10 ? `91${digits}` : digits;
+  if (phone.length < 10 || phone.length > 15) return null;
+  const guardian = item.father_name ? ` (अभिभावक: ${item.father_name})` : "";
+  const amount = item.remaining_amount.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  const message = `नमस्ते, Masscom Infotech Education की ओर से ${item.student_name}${guardian} की ${item.period} फीस कुल ₹${amount} बकाया होने की सूचना है। कृपया सुविधा अनुसार जमा करें। अगर फीस पहले ही जमा कर दी है, तो इस संदेश को नज़रअंदाज़ करें। धन्यवाद।`;
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+function FeeOverview() {
+  const [summary, setSummary] = useState<FeeSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadSummary = useCallback(async (refresh = false) => {
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/fees/summary", { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "फीस का सारांश लोड नहीं हो पाया।");
+      setSummary(result.data);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "फीस का सारांश लोड नहीं हो पाया।");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadSummary(); }, [loadSummary]);
+
+  const metrics = summary ? [
+    { label: "आज की वसूली", amount: summary.today_collection, detail: `${summary.today_receipts} रसीदें`, color: "text-emerald-200" },
+    { label: "इस महीने की वसूली", amount: summary.month_collection, detail: `${summary.month_receipts} रसीदें`, color: "text-cyan-200" },
+    { label: "कुल बकाया", amount: summary.overdue_amount, detail: `${summary.overdue_students} छात्र`, color: "text-rose-200" },
+    { label: "अगले 7 दिन में देय", amount: summary.upcoming_amount, detail: `${summary.upcoming_students} छात्र`, color: "text-amber-200" },
+  ] : [];
+
+  return (
+    <section className="mx-auto mb-8 max-w-6xl rounded-2xl border border-white/20 bg-slate-950/55 p-4 shadow-xl backdrop-blur-lg sm:p-6" aria-labelledby="fee-overview-title">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 id="fee-overview-title" className="text-xl font-semibold text-white">फीस का आज का सारांश</h2>
+          <p className="mt-1 text-sm text-gray-300">आज और इस महीने की वसूली, बकाया तथा आने वाली फीस</p>
+        </div>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => void loadSummary(true)} disabled={loading || refreshing} className="inline-flex items-center gap-2 rounded-md border border-white/25 px-3 py-2 text-sm text-white hover:bg-white/10 disabled:opacity-60">
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" /> ताज़ा करें
+          </button>
+          <Link to="/fees" className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-600">फीस लें</Link>
+        </div>
+      </div>
+
+      {error && <div role="alert" className="mb-4 flex items-start gap-2 rounded-lg border border-rose-300/30 bg-rose-950/40 p-3 text-sm text-rose-100"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>}
+
+      {loading && !summary ? <p className="py-8 text-center text-sm text-gray-300">फीस का सारांश लोड हो रहा है…</p> : summary && <>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {metrics.map(metric => <div key={metric.label} className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <p className="text-sm text-gray-300">{metric.label}</p>
+            <p className={`mt-2 text-2xl font-bold tabular-nums ${metric.color}`}>{currency(metric.amount)}</p>
+            <p className="mt-1 text-xs text-gray-400">{metric.detail}</p>
+          </div>)}
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-rose-200" aria-hidden="true" />
+              <h3 className="font-semibold text-white">बकाया फीस</h3>
+            </div>
+            {summary.overdue_items.length === 0 ? <p className="text-sm text-gray-300">अभी कोई बकाया फीस नहीं है।</p> : <ul className="space-y-2">
+              {summary.overdue_items.slice(0, 8).map((item, index) => {
+                const whatsapp = whatsappReminder(item);
+                return <li key={`${item.student_id}-${item.due_date}-${item.fee_category}-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-black/20 p-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-white">{item.student_name}</p>
+                    <p className="text-xs text-gray-300">{item.period} · देय {item.due_date} · {currency(item.remaining_amount)}</p>
+                  </div>
+                  {whatsapp ? <a href={whatsapp} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-green-700/80 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-green-600"><MessageCircle className="h-3.5 w-3.5" aria-hidden="true" /> WhatsApp</a> : <span className="text-xs text-gray-400">फोन नंबर उपलब्ध नहीं</span>}
+                </li>;
+              })}
+            </ul>}
+            {summary.overdue_students > 8 && <Link to="/fees" className="mt-3 inline-block text-sm font-medium text-rose-100 underline underline-offset-4">बाकी {summary.overdue_students - 8} छात्र फीस पेज पर देखें</Link>}
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <CalendarClock className="h-5 w-5 text-amber-200" aria-hidden="true" />
+              <h3 className="font-semibold text-white">अगले 7 दिनों में देय</h3>
+            </div>
+            {summary.upcoming_items.length === 0 ? <p className="text-sm text-gray-300">अगले 7 दिनों में कोई फीस देय नहीं है।</p> : <ul className="space-y-2">
+              {summary.upcoming_items.slice(0, 8).map((item, index) => <li key={`${item.student_id}-${item.due_date}-${item.fee_category}-${index}`} className="flex items-center justify-between gap-2 rounded-lg bg-black/20 p-3">
+                <div className="min-w-0"><p className="truncate font-medium text-white">{item.student_name}</p><p className="text-xs text-gray-300">{item.period} · {item.due_date}</p></div>
+                <span className="shrink-0 text-sm font-semibold text-amber-100">{currency(item.remaining_amount)}</span>
+              </li>)}
+            </ul>}
+            {summary.upcoming_students > 8 && <Link to="/fees" className="mt-3 inline-block text-sm font-medium text-amber-100 underline underline-offset-4">बाकी {summary.upcoming_students - 8} छात्र फीस पेज पर देखें</Link>}
+          </div>
+        </div>
+      </>}
+    </section>
+  );
+}
 
 const clockFormat = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
@@ -88,35 +228,40 @@ const modules: Array<{
   },
 ];
 
-const Index = () => (
-  <div className="relative min-h-screen overflow-hidden">
-    <div className="absolute inset-0 bg-black/40" />
-    <main className="container relative z-10 mx-auto px-4 py-8 sm:py-12">
-      <div className="mx-auto mb-7 max-w-6xl">
-        <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-200">Choose a work area to get started.</p>
-      </div>
-      <div className="mx-auto grid max-w-6xl gap-6 sm:grid-cols-2 xl:grid-cols-3">
-        {modules.map(({ title, description, action, to, Icon, iconClass, actionClass }) => (
-          <Card key={to} className="border-white/20 bg-white/10 backdrop-blur-lg transition-all duration-300 hover:bg-white/15 hover:shadow-xl">
-            <Link to={to} className="block rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
-              <CardHeader className="text-center">
-                <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full shadow-lg ${iconClass}`}>
-                  <Icon className="h-8 w-8 text-white" aria-hidden="true" />
-                </div>
-                <CardTitle className="text-xl text-white">{title}</CardTitle>
-                <CardDescription className="text-gray-300">{description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className={`w-full rounded-md px-4 py-3 text-center font-medium text-white transition-colors ${actionClass}`}>{action}</div>
-              </CardContent>
-            </Link>
-          </Card>
-        ))}
-        <DashboardClock />
-      </div>
-    </main>
-  </div>
-);
+const Index = () => {
+  const { isAdmin } = useAuth();
+
+  return (
+    <div className="relative min-h-screen overflow-hidden">
+      <div className="absolute inset-0 bg-black/40" />
+      <main className="container relative z-10 mx-auto px-4 py-8 sm:py-12">
+        <div className="mx-auto mb-7 max-w-6xl">
+          <h1 className="text-3xl font-bold text-white">Dashboard</h1>
+          <p className="mt-1 text-sm text-gray-200">Choose a work area to get started.</p>
+        </div>
+        {isAdmin() && <FeeOverview />}
+        <div className="mx-auto grid max-w-6xl gap-6 sm:grid-cols-2 xl:grid-cols-3">
+          {modules.map(({ title, description, action, to, Icon, iconClass, actionClass }) => (
+            <Card key={to} className="border-white/20 bg-white/10 backdrop-blur-lg transition-all duration-300 hover:bg-white/15 hover:shadow-xl">
+              <Link to={to} className="block rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                <CardHeader className="text-center">
+                  <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full shadow-lg ${iconClass}`}>
+                    <Icon className="h-8 w-8 text-white" aria-hidden="true" />
+                  </div>
+                  <CardTitle className="text-xl text-white">{title}</CardTitle>
+                  <CardDescription className="text-gray-300">{description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className={`w-full rounded-md px-4 py-3 text-center font-medium text-white transition-colors ${actionClass}`}>{action}</div>
+                </CardContent>
+              </Link>
+            </Card>
+          ))}
+          <DashboardClock />
+        </div>
+      </main>
+    </div>
+  );
+};
 
 export default Index;
