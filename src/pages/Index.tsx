@@ -184,7 +184,7 @@ const modules: Array<{
   {
     title: "Certificates",
     description: "Create new certificates or manage certificates already issued.",
-    action: "Open Certificates",
+    action: "Manage Certificate",
     to: "/generate",
     Icon: FileText,
     iconClass: "bg-gradient-to-br from-blue-500 to-blue-700",
@@ -193,7 +193,7 @@ const modules: Array<{
   {
     title: "Mark Sheets",
     description: "Create, find, edit, and download student mark sheets.",
-    action: "Open Mark Sheets",
+    action: "Manage Marksheet",
     to: "/marksheets",
     Icon: Database,
     iconClass: "bg-gradient-to-br from-cyan-500 to-cyan-700",
@@ -202,7 +202,7 @@ const modules: Array<{
   {
     title: "Manage Fees",
     description: "Collect student fees and manage payment records.",
-    action: "Open Fee Management",
+    action: "Fee Management",
     to: "/fees",
     Icon: IndianRupee,
     iconClass: "bg-gradient-to-br from-emerald-500 to-emerald-700",
@@ -211,7 +211,7 @@ const modules: Array<{
   {
     title: "Students",
     description: "Add, search, update, archive, and restore student records.",
-    action: "Open Student Records",
+    action: "Manage Student Record",
     to: "/students",
     Icon: Users,
     iconClass: "bg-indigo-700",
