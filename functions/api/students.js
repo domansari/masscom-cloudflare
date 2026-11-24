@@ -1,3 +1,4 @@
+import { confirmDeletePassword } from "./_delete-password.js";
 import { requireAdmin, sameOrigin } from "./_admin.js";
 import { certificateCourseOptions } from "./_exam-courses.js";
 
@@ -73,10 +74,17 @@ export async function onRequest({ request, env }) {
     const id = new URL(request.url).searchParams.get("id");
     if (method !== "POST" && (!id || id.length > 128)) return json({ error: "Invalid student ID" }, 400);
     if (method === "DELETE") {
-      const result = await env.DB.prepare(
-        "UPDATE students SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_active = 1"
-      ).bind(id).run();
-      return result.meta.changes ? json({ success: true }) : json({ error: "Active student not found" }, 404);
+      const passwordError = await confirmDeletePassword(request, env, account);
+      if (passwordError) return passwordError;
+      const docs = await env.DB.prepare(
+        "SELECT object_key FROM student_documents WHERE student_id = ?"
+      ).bind(id).all();
+      const result = await env.DB.prepare("DELETE FROM students WHERE id = ?").bind(id).run();
+      if (!result.meta.changes) return json({ error: "Student not found" }, 404);
+      if (env.STUDENT_FILES) {
+        await Promise.all((docs.results || []).map(document => env.STUDENT_FILES.delete(document.object_key).catch(() => null)));
+      }
+      return json({ success: true });
     }
 
     const raw = await request.text();

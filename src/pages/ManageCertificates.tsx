@@ -1,13 +1,13 @@
 import ExcelBackup from "@/components/ExcelBackup";
 import { Button } from "@/components/ui/button";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArrowLeft, Download } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { downloadCertificateBatch } from "@/lib/batch-certificates";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import WorkspaceTabs from "@/components/WorkspaceTabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +40,7 @@ type SortOrder = 'asc' | 'desc';
 const RECORDS_PER_PAGE = 20;
 
 const ManageCertificates = () => {
+  const [searchParams] = useSearchParams();
   const { isAdmin } = useAuth();
   const canDelete = isAdmin();
   const { toast } = useToast();
@@ -70,6 +71,13 @@ const ManageCertificates = () => {
       return result.data || [];
     }
   });
+
+  useEffect(() => {
+    const recordId = searchParams.get("studentRecord");
+    if (!recordId || !certificates.length) return;
+    const record = certificates.find((item: Certificate) => item.id === recordId);
+    if (record) handleEditCertificate(record);
+  }, [certificates, searchParams]);
 
   const batchCodes: string[] = Array.from(new Set<string>(certificates.map((c: Certificate) => c.batch_number?.trim() || "").filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const batchCount = certificates.filter((c: Certificate) => c.batch_number?.trim() === selectedBatch).length;

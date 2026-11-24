@@ -19,6 +19,7 @@ const GenerateCertificate = () => {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const markSheetId = params.get("marksheet");
+  const studentId = params.get("student");
   const [readySheetId, setReadySheetId] = useState<string | null>(null);
   const [sheetError, setSheetError] = useState("");
   const [linkedCertificateId, setLinkedCertificateId] = useState("");
@@ -38,6 +39,20 @@ const GenerateCertificate = () => {
   const [batchNumber, setBatchNumber] = useState("");
   const [qrCodeData, setQrCodeData] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!studentId || markSheetId) return;
+    const controller = new AbortController();
+    fetch("/api/students", { signal: controller.signal, cache: "no-store" }).then(async response => {
+      if (!response.ok) throw new Error("Unable to load the student record.");
+      const result = await response.json();
+      const student = (result.data || []).find((item: { id:string }) => item.id === studentId);
+      if (!student) throw new Error("Student not found.");
+      setFormData(current => ({ ...current, studentName: student.student_name || "", fatherName: student.father_name || "", courseName: student.course_name || "", rollNo: student.roll_no || "" }));
+      setBatchNumber(student.batch_code || student.section_batch || "");
+    }).catch((error: Error) => { if (!controller.signal.aborted) setSheetError(error.message); });
+    return () => controller.abort();
+  }, [studentId, markSheetId]);
 
   useEffect(() => {
     if (!markSheetId) return;

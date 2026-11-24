@@ -91,11 +91,13 @@ export default function MarkSheets({ manage = false }: { manage?: boolean }) {
   const [params] = useSearchParams();
   const certificateId = params.get("certificate");
   const editLinked = Boolean(certificateId && params.get("edit") === "1");
-  const workspaceKey = certificateId ? `${certificateId}:${editLinked}` : manage ? "manage" : "create";
-  return <MarkSheetWorkspace key={workspaceKey} manage={manage} certificateId={certificateId} editLinked={editLinked} />;
+  const sheetId = params.get("sheet");
+  const studentId = params.get("student");
+  const workspaceKey = certificateId ? certificateId + ":" + editLinked : sheetId ? "sheet:" + sheetId : studentId ? "student:" + studentId : manage ? "manage" : "create";
+  return <MarkSheetWorkspace key={workspaceKey} manage={manage} certificateId={certificateId} editLinked={editLinked} sheetId={sheetId} studentId={studentId} />;
 }
 
-function MarkSheetWorkspace({ manage, certificateId, editLinked }: { manage: boolean; certificateId: string | null; editLinked: boolean }) {
+function MarkSheetWorkspace({ manage, certificateId, editLinked, sheetId, studentId }: { manage: boolean; certificateId: string | null; editLinked: boolean; sheetId: string | null; studentId: string | null }) {
   const { isAdmin } = useAuth();
   const navigate = useNavigate();
   const showSaved = manage || Boolean(certificateId);
@@ -171,9 +173,39 @@ function MarkSheetWorkspace({ manage, certificateId, editLinked }: { manage: boo
   }
 
   useEffect(() => {
-    if (!showSaved || editLinked) return;
+    if (!showSaved || editLinked || sheetId) return;
     refresh().catch((error: Error) => setLoadError(error.message)).finally(() => setLoading(false));
-  }, [showSaved, editLinked]);
+  }, [showSaved, editLinked, sheetId]);
+
+  useEffect(() => {
+    if (!sheetId) return;
+    let active = true;
+    request().then((result: { data: Sheet[] }) => {
+      if (!active) return;
+      const found = (result.data || []).find(sheet => sheet.id === sheetId);
+      setSheets(result.data || []);
+      if (!found) throw new Error("Marksheet not found.");
+      edit(found);
+    }).catch((error: Error) => { if (active) setLoadError(error.message); }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [sheetId]);
+
+  useEffect(() => {
+    if (!studentId || certificateId || manage) return;
+    let active = true;
+    fetch("/api/students", { cache: "no-store" }).then(async response => {
+      if (!response.ok) throw new Error("Unable to load the student record.");
+      const result = await response.json();
+      const student = (result.data || []).find((item: { id:string }) => item.id === studentId);
+      if (!student) throw new Error("Student not found.");
+      if (!active) return;
+      const course = examCourseCode(student.course_name || "");
+      if (course) setEditingCourse(course);
+      const yearMatch = /^\d{4}/.exec(student.session_year || "");
+      setForm(current => ({ ...current, roll_no: student.roll_no || "", batch_code: student.batch_code || student.section_batch || "", year: yearMatch?.[0] || String(new Date().getFullYear()), student_name: student.student_name || "", father_name: student.father_name || "" }));
+    }).catch((error: Error) => { if (active) setLoadError(error.message); });
+    return () => { active = false; };
+  }, [studentId, certificateId, manage]);
 
   useEffect(() => {
     if (!editLinked || !certificateId) return;

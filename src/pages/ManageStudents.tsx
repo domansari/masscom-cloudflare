@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { Archive, ArrowLeft, Download, FileText, Image, Pencil, Plus, RotateCcw, Search, Trash2, Users, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Archive, ArrowLeft, Download, Eye, FileText, Image, Pencil, Plus, RotateCcw, Search, Trash2, Users, X } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -58,12 +59,17 @@ async function requestDocuments(studentId: string, method = "GET", type?: Docume
 
 const display = (value: string | number | null) => value == null || value === "" ? "—" : String(value);
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return <section className="space-y-4"><h3 className="border-b border-white/20 pb-2 text-lg font-semibold text-white">{title}</h3><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div></section>;
+function Section({ title, children, id }: { title: string; children: ReactNode; id?: string }) {
+  return <section id={id} className="space-y-4"><h3 className="border-b border-white/20 pb-2 text-lg font-semibold text-white">{title}</h3><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div></section>;
 }
 
 export default function ManageStudents() {
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [documents, setDocuments] = useState<StudentDocument[]>([]);
   const [documentFiles, setDocumentFiles] = useState<Record<DocumentType, File | null>>(emptyDocumentFiles);
@@ -83,6 +89,15 @@ export default function ManageStudents() {
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void loadStudents(); }, [loadStudents]);
+  useEffect(() => {
+    const id = searchParams.get("edit");
+    const student = id && students.find(item => item.id === id);
+    if (!student) return;
+    const focusFees = searchParams.get("focus") === "fees";
+    edit(student);
+    setSearchParams({}, { replace: true });
+    if (focusFees) window.setTimeout(() => document.getElementById("student-fees")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+  }, [students, searchParams]);
   useEffect(() => {
     const photo = documentFiles.photo;
     if (!photo) { setSelectedPhotoPreview(null); return; }
@@ -147,10 +162,23 @@ export default function ManageStudents() {
 
   const setActive = async (student: Student, active: boolean) => {
     try {
-      if (!active) await request("DELETE", student.id);
-      else await request("PUT", student.id, { ...student, first_name: student.first_name || student.student_name, is_active: 1 });
+      await request("PUT", student.id, { ...student, first_name: student.first_name || student.student_name, is_active: active ? 1 : 0 });
       toast({ title: active ? "Student restored" : "Student archived" }); await loadStudents();
     } catch (cause) { toast({ title: "Could not update student", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" }); }
+  };
+
+  const confirmDelete = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!studentToDelete || !deletePassword || deleting) return;
+    setDeleting(true); setDeleteError("");
+    try {
+      const response = await fetch(`/api/students?id=${encodeURIComponent(studentToDelete.id)}`, { method: "DELETE", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: deletePassword }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Unable to delete student.");
+      toast({ title: "Student permanently deleted", description: studentToDelete.student_name });
+      setStudentToDelete(null); setDeletePassword(""); await loadStudents();
+    } catch (cause) { setDeleteError(cause instanceof Error ? cause.message : "Unable to delete student."); }
+    finally { setDeleting(false); }
   };
 
   const field = (name: keyof StudentForm, label: string, required = false, type = "text", hint?: string) => <div className="space-y-2" key={name}>
@@ -209,7 +237,7 @@ export default function ManageStudents() {
         {field("section_batch", "Section / Batch")}{field("admission_date", "Admission Date", false, "date")}
       </Section>
 
-      <Section title="Fee">
+      <Section title="Fee" id="student-fees">
         {field("one_time_fee", "One-time Fee (₹)", false, "number", "Leave blank to use the course fee.")}
         {field("monthly_fee", "Monthly Fee (₹)", false, "number", "Record the monthly fee for this student.")}
       </Section>
@@ -257,11 +285,14 @@ export default function ManageStudents() {
             <td className="px-3 py-3">{display(student.course_name)}<div className="text-xs text-gray-300">{display(student.session_year)}</div></td>
             <td className="px-3 py-3">{display(student.phone)}<div className="text-xs text-gray-300">{display(student.email)}</div></td>
             <td className="px-3 py-3"><span className={student.is_active ? "text-emerald-300" : "text-gray-300"}>{student.is_active ? "Active" : "Archived"}</span></td>
-            <td className="px-3 py-3"><div className="flex justify-end gap-2">{student.is_active && <Button size="sm" variant="outline" onClick={() => edit(student)} aria-label={`Edit ${student.student_name}`}><Pencil className="h-4 w-4" /></Button>}
-              {student.is_active ? <Button size="sm" variant="outline" onClick={() => setActive(student, false)} aria-label={`Archive ${student.student_name}`}><Archive className="h-4 w-4" /></Button> : <Button size="sm" variant="outline" onClick={() => setActive(student, true)} aria-label={`Restore ${student.student_name}`}><RotateCcw className="h-4 w-4" /></Button>}</div></td>
+            <td className="px-3 py-3"><div className="flex justify-end gap-2"><Button asChild size="sm" variant="outline" aria-label={`Preview ${student.student_name}`}><a href={`/students/${encodeURIComponent(student.id)}/preview`} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4" /></a></Button>{student.is_active && <Button size="sm" variant="outline" onClick={() => edit(student)} aria-label={`Edit ${student.student_name}`}><Pencil className="h-4 w-4" /></Button>}{student.is_active ? <Button size="sm" variant="outline" onClick={() => setActive(student, false)} aria-label={`Archive ${student.student_name}`}><Archive className="h-4 w-4" /></Button> : <Button size="sm" variant="outline" onClick={() => setActive(student, true)} aria-label={`Restore ${student.student_name}`}><RotateCcw className="h-4 w-4" /></Button>}<Button size="sm" variant="outline" onClick={() => { setStudentToDelete(student); setDeletePassword(""); setDeleteError(""); }} aria-label={`Permanently delete ${student.student_name}`}><Trash2 className="h-4 w-4" /></Button></div></td>
           </tr>)}</tbody></table></div>}
     </CardContent></Card>
     </section>}
     </main>
+    <Dialog open={Boolean(studentToDelete)} onOpenChange={open => { if (!open && !deleting) { setStudentToDelete(null); setDeletePassword(""); setDeleteError(""); } }}>
+      <DialogContent><DialogHeader><DialogTitle>Delete Student Permanently</DialogTitle><DialogDescription>This permanently deletes {studentToDelete?.student_name || "this student"} and their stored photo. Certificate and marksheet records are kept.</DialogDescription></DialogHeader>
+        <form onSubmit={confirmDelete} className="space-y-4"><div className="space-y-2"><Label htmlFor="student-delete-password">Confirm your admin login password</Label><Input id="student-delete-password" type="password" autoComplete="current-password" value={deletePassword} onChange={event => { setDeletePassword(event.target.value); setDeleteError(""); }} required maxLength={1024} />{deleteError && <p role="alert" className="text-sm text-destructive">{deleteError}</p>}</div><DialogFooter><Button type="button" variant="outline" onClick={() => setStudentToDelete(null)} disabled={deleting}>Cancel</Button><Button type="submit" variant="destructive" disabled={!deletePassword || deleting}>{deleting ? "Deleting…" : "Delete permanently"}</Button></DialogFooter></form>
+      </DialogContent></Dialog>
   </div>;
 }
