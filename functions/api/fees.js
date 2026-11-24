@@ -108,7 +108,7 @@ export async function onRequest({ request, env }) {
         if (selectedPlanItems.some(entry => !entry.current || entry.current.remaining_amount <= 0.001)) {
           return json({ error: "One or more selected fees have already been paid." }, 409);
         }
-        if (selectedPlanItems.some(entry => entry.item.fee_category === "Monthly Fee" && entry.current.status !== "pending")) {
+        if (selectedPlanItems.some(entry => entry.item.fee_category === "Monthly Fee" && entry.current.status !== "pending" && entry.current.status !== "upcoming")) {
           return json({ error: "Only monthly fees that are currently due can be collected." }, 409);
         }
         allocations = selectedPlanItems.map(({ item, current }) => ({ item, amount: current.remaining_amount }));
@@ -130,7 +130,7 @@ export async function onRequest({ request, env }) {
         const feePlan = await getStudentFeePlan(env, student);
         const currentItem = feePlan.items.find(item => item.id === planItemId);
         if (!currentItem || currentItem.remaining_amount <= 0.001) return json({ error: "This fee has already been paid." }, 409);
-        if (currentItem.fee_category === "Monthly Fee" && currentItem.status !== "pending") {
+        if (currentItem.fee_category === "Monthly Fee" && currentItem.status !== "pending" && currentItem.status !== "upcoming") {
           return json({ error: "Only monthly fees that are currently due can be collected." }, 409);
         }
         if (payment.amount > currentItem.remaining_amount + 0.001) {
@@ -202,7 +202,7 @@ export async function onRequest({ request, env }) {
       if (allocations.some(entry => !entry.current || entry.current.remaining_amount <= 0.001)) {
         return json({ error: "One or more selected fees have already been paid." }, 409);
       }
-      if (allocations.some(entry => entry.item.fee_category === "Monthly Fee" && entry.current.status !== "pending")) {
+      if (allocations.some(entry => entry.item.fee_category === "Monthly Fee" && entry.current.status !== "pending" && entry.current.status !== "upcoming")) {
         return json({ error: "Only monthly fees that are currently due can be collected." }, 409);
       }
       let payable = allocations.map(({ item, current }) => ({ item, amount: current.remaining_amount }));
