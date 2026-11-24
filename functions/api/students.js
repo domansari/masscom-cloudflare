@@ -1,17 +1,18 @@
 import { requireAdmin, sameOrigin } from "./_admin.js";
+import { certificateCourseOptions } from "./_exam-courses.js";
 
 const json = (data, status = 200) => Response.json(data, {
   status,
   headers: { "Cache-Control": "no-store" },
 });
 
-const fields = ["student_name", "father_name", "roll_no", "batch_code", "course_name", "admission_date", "date_of_birth", "phone", "email", "address", "notes", "first_name", "last_name", "mother_name", "gender", "category", "aadhaar_last4", "institute_name", "session_year", "section_batch", "referred_by"];
+const fields = ["student_name", "father_name", "roll_no", "batch_code", "course_name", "admission_date", "date_of_birth", "phone", "email", "address", "notes", "first_name", "last_name", "mother_name", "gender", "category", "aadhaar_last4", "institute_name", "session_year", "section_batch"];
 const limits = {
   student_name: 150, father_name: 150, roll_no: 64, batch_code: 64,
   course_name: 150, admission_date: 10, date_of_birth: 10, phone: 32,
   email: 254, address: 1000, notes: 1000,
   first_name: 100, last_name: 100, mother_name: 150, gender: 16, category: 32,
-  aadhaar_last4: 4, institute_name: 180, session_year: 16, section_batch: 64, referred_by: 64,
+  aadhaar_last4: 4, institute_name: 180, session_year: 16, section_batch: 64,
 };
 const feeFields = ["one_time_fee", "monthly_fee"];
 
@@ -22,7 +23,7 @@ function validDate(value) {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-function normalize(data) {
+function normalize(data, existingCourse = "") {
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
   const student = {};
   for (const field of fields) {
@@ -49,6 +50,7 @@ function normalize(data) {
   student.first_name = first || null;
   student.roll_no = student.roll_no || `MIE-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
   if (!student.student_name || !student.father_name || !student.course_name || !student.date_of_birth || !validDate(student.admission_date) || !validDate(student.date_of_birth)) return null;
+  if (!certificateCourseOptions.includes(student.course_name) && student.course_name !== existingCourse) return null;
   if (student.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(student.email)) return null;
   return student;
 }
@@ -80,7 +82,10 @@ export async function onRequest({ request, env }) {
     const raw = await request.text();
     if (raw.length > 8192) return json({ error: "Request too large" }, 413);
     const data = JSON.parse(raw);
-    const student = normalize(data);
+    const existingCourse = method === "PUT"
+      ? (await env.DB.prepare("SELECT course_name FROM students WHERE id = ? LIMIT 1").bind(id).first())?.course_name || ""
+      : "";
+    const student = normalize(data, existingCourse);
     if (!student) return json({ error: "Enter a student name, valid dates, and check that each field is within its length limit." }, 400);
     const isActive = data.is_active === 0 ? 0 : 1;
     const writeFields = [...fields, ...feeFields];

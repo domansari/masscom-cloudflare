@@ -89,7 +89,9 @@ Before publishing the student register, apply [migration 0008](migrations/0008_s
 
 For the expanded enrollment form, apply [migration 0009](migrations/0009_student_enrollment_fields.sql) to the same D1 database before publishing the updated Pages code. It adds family, gender/category, session, fee, referral, and Aadhaar-last-four fields and backfills the first name from existing student names.
 
-For private student file uploads, create an R2 bucket named `masscom-student-files` and leave public access/custom domains disabled. In the Pages project settings, add an R2 bucket binding named `STUDENT_FILES` pointing to that bucket for production (and preview if used). Apply [migration 0010](migrations/0010_student_documents.sql) to the same D1 database before publishing the file-upload code. The `/api/students/files` endpoint requires an administrator session, accepts files up to 5 MB, validates image/PDF signatures, and returns downloads as private attachments.
+For private student photos, create an R2 bucket named `masscom-student-files` and leave public access/custom domains disabled. In the Pages project settings, add an R2 bucket binding named `STUDENT_FILES` pointing to that bucket for production (and preview if used). Apply [migration 0010](migrations/0010_student_documents.sql) to the same D1 database before publishing the photo-upload code. The `/api/students/files` endpoint requires an administrator session, accepts JPG, PNG, or WebP student photos up to 5 MB, validates file signatures, and returns downloads as private attachments.
+
+The enrollment form requires a student photo, shares its course dropdown with certificate generation, and does not collect a referral enrollment number or other document uploads.
 
 ## Provision a confirmed verifier
 

@@ -30,6 +30,16 @@ export const examCourses = {
   },
 };
 
+export const certificateCourseOptions = [
+  examCourses.dca.name,
+  "Advance Diploma in Computer Application",
+  examCourses.cca.name,
+  examCourses.adca.name,
+  examCourses.cdtp.name,
+  examCourses.adtp.name,
+  "Diploma in DTP",
+];
+
 export const passingMark = 33;
 
 export function examCourseNames(code) {

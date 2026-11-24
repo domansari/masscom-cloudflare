@@ -1,6 +1,6 @@
 import { requireAdmin, sameOrigin } from "../_admin.js";
 
-const documentTypes = new Set(["photo", "certificate10", "certificate12", "aadhaar_card", "other"]);
+const documentTypes = new Set(["photo"]);
 const maxFileSize = 5 * 1024 * 1024;
 const json = (data, status = 200) => Response.json(data, {
   status,

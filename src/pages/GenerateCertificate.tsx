@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import QRCodeGenerator from "@/components/QRCodeGenerator";
 import CertificatePreview from "@/components/CertificatePreview";
-import { examCourseCode, examCourses, marksheetResult, passingMark, validExamMarks } from "../../functions/api/_exam-courses.js";
+import { certificateCourseOptions, examCourseCode, examCourses, marksheetResult, passingMark, validExamMarks } from "../../functions/api/_exam-courses.js";
 import { CertificateData } from "@/types/certificate";
 
 const GenerateCertificate = () => {
@@ -63,15 +63,7 @@ const GenerateCertificate = () => {
   }, [markSheetId]);
 
   // Course options with updated list
-  const courseOptions = [
-    "Diploma in Computer Application",
-    "Advance Diploma in Computer Application",
-    examCourses.cca.name,
-    examCourses.adca.name,
-    examCourses.cdtp.name,
-    examCourses.adtp.name,
-    "Diploma in DTP"
-  ];
+  const courseOptions = certificateCourseOptions;
 
   // Grade options updated
   const gradeOptions = [

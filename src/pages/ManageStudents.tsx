@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { certificateCourseOptions } from "../../functions/api/_exam-courses.js";
 
 type Student = {
   id: string; student_name: string; first_name: string | null; last_name: string | null;
@@ -15,20 +16,14 @@ type Student = {
   course_name: string | null; institute_name: string | null; session_year: string | null;
   admission_date: string | null; date_of_birth: string | null; phone: string | null; email: string | null;
   address: string | null; notes: string | null; one_time_fee: number | null; monthly_fee: number | null;
-  referred_by: string | null; is_active: number;
+  is_active: number;
 };
 
 type StudentForm = Omit<Student, "id" | "is_active">;
-type DocumentType = "photo" | "certificate10" | "certificate12" | "aadhaar_card" | "other";
+type DocumentType = "photo";
 type StudentDocument = { document_type: DocumentType; file_name: string; content_type: string; file_size: number; created_at: string };
-const documentFields: { type: DocumentType; label: string; accept: string }[] = [
-  { type: "photo", label: "Student Photo", accept: "image/jpeg,image/png,image/webp" },
-  { type: "certificate10", label: "10th Certificate", accept: "image/jpeg,image/png,image/webp,application/pdf" },
-  { type: "certificate12", label: "12th Certificate", accept: "image/jpeg,image/png,image/webp,application/pdf" },
-  { type: "aadhaar_card", label: "Aadhaar Card", accept: "image/jpeg,image/png,image/webp,application/pdf" },
-  { type: "other", label: "Other Document", accept: "image/jpeg,image/png,image/webp,application/pdf" },
-];
-const emptyDocumentFiles = (): Record<DocumentType, File | null> => ({ photo: null, certificate10: null, certificate12: null, aadhaar_card: null, other: null });
+const documentField = { type: "photo" as const, label: "Student Photo", accept: "image/jpeg,image/png,image/webp" };
+const emptyDocumentFiles = (): Record<DocumentType, File | null> => ({ photo: null });
 const today = new Date();
 const dateInput = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 const academicStartYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
@@ -37,7 +32,7 @@ const emptyForm: StudentForm = {
   student_name: "", first_name: "", last_name: "", father_name: "", mother_name: "", gender: "Male", category: "",
   aadhaar_last4: "", roll_no: "", batch_code: "", section_batch: "", course_name: "", institute_name: "Masscom Infotech Education",
   session_year: currentSession, admission_date: dateInput, date_of_birth: "", phone: "", email: "", address: "", notes: "",
-  one_time_fee: null, monthly_fee: null, referred_by: "",
+  one_time_fee: null, monthly_fee: null,
 };
 
 async function request(method: string, id?: string, body?: object) {
@@ -109,11 +104,10 @@ export default function ManageStudents() {
       const result = await request(editingId ? "PUT" : "POST", editingId || undefined, { ...form, student_name: studentName, is_active: 1 });
       const studentId = editingId || result.id;
       const failedUploads: string[] = [];
-      for (const item of documentFields) {
-        const file = documentFiles[item.type];
-        if (!file) continue;
-        try { await requestDocuments(studentId, "POST", item.type, file); }
-        catch (cause) { failedUploads.push(`${item.label}: ${cause instanceof Error ? cause.message : "upload failed"}`); }
+      const photo = documentFiles.photo;
+      if (photo) {
+        try { await requestDocuments(studentId, "POST", "photo", photo); }
+        catch (cause) { failedUploads.push(`Student Photo: ${cause instanceof Error ? cause.message : "upload failed"}`); }
       }
       await loadStudents();
       if (failedUploads.length) {
@@ -176,29 +170,33 @@ export default function ManageStudents() {
       </Section>
 
       <Section title="Course / Class">
-        {field("institute_name", "Institute Name", false, "text", "Defaults to Masscom Infotech Education.")}{field("course_name", "Course / Class", true)}
+        {field("institute_name", "Institute Name", false, "text", "Defaults to Masscom Infotech Education.")}
+        <div className="space-y-2"><Label htmlFor="course_name">Course / Class *</Label><select id="course_name" required className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.course_name || ""} onChange={event => updateField("course_name", event.target.value)}>
+          <option value="">Select certificate course</option>
+          {editingId && form.course_name && !certificateCourseOptions.includes(form.course_name) && <option value={form.course_name}>{form.course_name} (existing record)</option>}
+          {certificateCourseOptions.map(course => <option key={course} value={course}>{course}</option>)}
+        </select></div>
         {field("session_year", "Session Year")}{field("roll_no", "Roll Number", false, "text", "Leave blank if you will assign it later.")}
         {field("section_batch", "Section / Batch")}{field("admission_date", "Admission Date", false, "date")}
       </Section>
 
-      <Section title="Fee & Referral">
+      <Section title="Fee">
         {field("one_time_fee", "One-time Fee (₹)", false, "number", "Leave blank to use the course fee.")}
         {field("monthly_fee", "Monthly Fee (₹)", false, "number", "Record the monthly fee for this student.")}
-        {field("referred_by", "Referred By (Enrollment No.)", false, "text", "Enrollment number of the student who referred them.")}
       </Section>
 
-      <section className="space-y-4"><h3 className="border-b pb-2 text-lg font-semibold">Photo & Documents</h3>
-        <p className="text-sm text-slate-600">Private files are limited to 5 MB each. Photos accept JPG, PNG, or WebP. Documents also accept PDF.</p>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{documentFields.map(item => {
+      <section className="space-y-4"><h3 className="border-b pb-2 text-lg font-semibold">Student Photo</h3>
+        <p className="text-sm text-slate-600">A student photo is required. Use JPG, PNG, or WebP, up to 5 MB.</p>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[documentField].map(item => {
           const current = documents.find(document => document.document_type === item.type);
           return <div className="space-y-2 rounded-md border p-3" key={item.type}>
-            <Label htmlFor={`file-${item.type}`}>{item.label}</Label>
+            <Label htmlFor={`file-${item.type}`}>{item.label} *</Label>
             {current && editingId && <div className="flex items-center justify-between gap-2 text-xs text-slate-600">
               <span className="flex min-w-0 items-center gap-1 truncate"><FileText className="h-3.5 w-3.5 shrink-0" />{current.file_name}</span>
               <div className="flex shrink-0 gap-1"><a className="inline-flex items-center rounded border px-2 py-1 hover:bg-slate-50" href={`/api/students/files?student_id=${encodeURIComponent(editingId)}&type=${item.type}`} aria-label={`Download ${item.label}`}><Download className="h-3.5 w-3.5" /></a>
                 <Button type="button" size="sm" variant="outline" aria-label={`Delete ${item.label}`} onClick={async () => { try { await requestDocuments(editingId, "DELETE", item.type); await loadDocuments(editingId); toast({ title: `${item.label} deleted` }); } catch (cause) { toast({ title: "Could not delete document", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" }); } }}><Trash2 className="h-3.5 w-3.5" /></Button></div>
             </div>}
-            <Input id={`file-${item.type}`} type="file" accept={item.accept} onChange={event => setDocumentFiles(currentFiles => ({ ...currentFiles, [item.type]: event.target.files?.[0] || null }))} />
+            <Input id={`file-${item.type}`} type="file" accept={item.accept} required={!current} onChange={event => setDocumentFiles(currentFiles => ({ ...currentFiles, [item.type]: event.target.files?.[0] || null }))} />
             {documentFiles[item.type] && <p className="truncate text-xs text-slate-500">Selected: {documentFiles[item.type]?.name}</p>}
           </div>;
         })}</div>
