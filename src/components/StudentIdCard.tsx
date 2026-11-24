@@ -77,25 +77,25 @@ export default function StudentIdCard({ card, photoUrl }: { card: StudentIdCardR
       <div className="absolute -left-8 -top-8 h-28 w-28 rounded-full bg-emerald-700/80" />
       <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-emerald-700/80" />
       <div className="relative flex h-full flex-col items-center px-4 pt-3 text-center text-white">
-        <img src="/favicon.ico" alt="Masscom logo" className="h-12 w-12 rounded-sm bg-white p-1 object-contain" />
-        <p className="mt-2 text-[15px] font-extrabold leading-tight">Masscom Infotech Education</p>
+        <img src="/favicon.ico" alt="Masscom logo" className="h-[58px] w-[58px] object-contain" />
+        <p className="mt-1 text-[15px] font-extrabold leading-tight">Masscom Infotech Education</p>
         <p className="mt-1 text-[8px] font-semibold uppercase tracking-[0.28em] text-emerald-100">Student Identity Card</p>
       </div>
     </div>
     <div className="absolute inset-x-0 top-[28.5%] h-[5px] bg-amber-400" />
     <div className="absolute inset-x-0 bottom-0 top-[30%]" style={{ backgroundImage: "radial-gradient(#e8f3ed 1.2px, transparent 1.2px)", backgroundSize: "20px 20px" }} />
-    <div className="absolute left-1/2 top-[22%] h-[22%] aspect-square -translate-x-1/2 rounded-full border-[5px] border-amber-400 bg-white p-1 shadow-lg">
+    <div className="absolute left-1/2 top-[21%] h-[24%] aspect-square -translate-x-1/2 rounded-full border-[5px] border-amber-400 bg-white p-1 shadow-lg">
       <img src={photoUrl} alt={card.student_name + " photo"} className="h-full w-full rounded-full bg-slate-100 object-cover" onError={event => { event.currentTarget.style.visibility = "hidden"; }} />
     </div>
-    <div className="absolute inset-x-3 top-[44.5%] text-center">
+    <div className="absolute inset-x-3 top-[45.5%] text-center">
       <p className="truncate text-[18px] font-extrabold uppercase leading-tight text-emerald-900">{card.student_name}</p>
       <span className="mt-1 inline-flex rounded-full bg-amber-400 px-8 py-1 text-[9px] font-bold uppercase tracking-[0.22em] text-white">Student</span>
     </div>
-    <div className="absolute inset-x-6 top-[54%] grid grid-cols-[1fr_88px] gap-2">
+    <div className="absolute inset-x-6 top-[55%] grid grid-cols-[1fr_88px] gap-2">
       <div className="space-y-1.5 text-[10px] leading-tight">
-        <div className="flex gap-1"><span className="w-[70px] shrink-0 font-bold text-slate-500">Enrollment No.</span><span className="font-extrabold text-slate-900">{card.registration_no}</span></div>
-        <div className="flex gap-1"><span className="w-[70px] shrink-0 font-bold text-slate-500">Father</span><span className="truncate font-semibold text-slate-800">{card.father_name || "—"}</span></div>
-        <div className="flex gap-1"><span className="w-[70px] shrink-0 font-bold text-slate-500">Course</span><span className="font-semibold text-slate-800">{card.course_name || "—"}</span></div>
+        <div className="grid grid-cols-[62px_minmax(0,1fr)] items-baseline gap-1 whitespace-nowrap text-[8px]"><span className="font-bold text-slate-500">Enrollment No.</span><span className="truncate font-extrabold text-slate-900">{card.registration_no}</span></div>
+        <div className="flex gap-1"><span className="w-[70px] shrink-0 font-bold text-slate-500">Father’s Name</span><span className="truncate font-semibold text-slate-800">{card.father_name || "—"}</span></div>
+        <div className="flex gap-1"><span className="w-[70px] shrink-0 font-bold text-slate-500">Course</span><span className="line-clamp-2 break-words font-semibold text-slate-800">{card.course_name || "—"}</span></div>
         <div className="flex gap-1"><span className="w-[70px] shrink-0 font-bold text-slate-500">DOB</span><span className="font-semibold text-slate-800">{formatIndianDate(card.date_of_birth)}</span></div>
         <div className="flex gap-1"><span className="w-[70px] shrink-0 font-bold text-slate-500">Mobile</span><span className="font-semibold text-slate-800">{card.phone || "—"}</span></div>
       </div>
@@ -103,16 +103,17 @@ export default function StudentIdCard({ card, photoUrl }: { card: StudentIdCardR
         <div className="flex h-[82px] w-[82px] items-center justify-center rounded-lg border-2 border-emerald-100 bg-white p-1">
           {qrImage ? <img src={qrImage} alt={"QR code for enrollment " + card.registration_no} className="h-full w-full" /> : null}
         </div>
-        <span className="mt-1 text-[7px] font-bold text-slate-600">SCAN FOR STUDENT RECORD</span>
-        <div className="mt-3 w-full text-center"><div className="border-t border-slate-400" /><span className="text-[7px] font-semibold text-slate-600">Director</span></div>
+        <span className="mt-1 w-full text-center text-[7px] font-bold text-slate-600">SCAN FOR STUDENT RECORD</span>
+        <div className="mt-1 w-full text-center"><div className="border-t border-slate-400" /><span className="text-[7px] font-semibold text-slate-600">Director</span></div>
       </div>
     </div>
     <div className="absolute inset-x-8 top-[76%]">
-      <p className="mb-1 text-center text-[7px] font-bold uppercase tracking-[0.18em] text-emerald-800">Attendance Barcode · Enrollment No.</p>
+      <p className="mb-1 text-center text-[6px] font-bold uppercase tracking-[0.12em] text-emerald-800">Attendance Barcode · Enrollment No.</p>
       <Code39Barcode value={card.registration_no} />
     </div>
-    <div className="absolute inset-x-0 bottom-0 flex min-h-[7%] items-center justify-center bg-emerald-800 px-3 py-1 text-center text-[7px] font-medium leading-tight text-white">
-      1st Floor Mohsin Market, Phatak Yusufpur, Mohammadabad, Ghazipur, Uttar Pradesh – 233227
+    <div className="absolute inset-x-0 bottom-0 flex min-h-[12%] flex-col items-center justify-center bg-emerald-800 px-3 py-1 text-center text-[6px] font-medium leading-tight text-white">
+      <span>1st Floor, Mohsin Market, Yusufpur, Mohammadabad, Ghazipur (U.P.) 233227</span>
+      <span>info@masscom.co.in · www.masscom.co.in</span>
     </div>
   </div>;
 }
