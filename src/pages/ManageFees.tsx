@@ -49,6 +49,8 @@ export default function ManageFees() {
   const [editingId, setEditingId] = useState("");
   const [activeTab, setActiveTab] = useState("collect");
   const [search, setSearch] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -93,12 +95,13 @@ export default function ManageFees() {
   const matchingStudents = activeStudents.filter(student => !studentSearch.trim() || String(student.roll_no || "").toLowerCase().includes(studentSearch.trim().toLowerCase()));
   const filteredPayments = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return payments;
-    return payments.filter(payment =>
-      [payment.receipt_no, payment.student_name, payment.enrollment_no, payment.fee_category, payment.payment_method, payment.upi_reference_number]
-        .some(value => String(value || "").toLowerCase().includes(query))
-    );
-  }, [payments, search]);
+    return payments.filter(payment => {
+      const inDateRange = (!fromDate || payment.payment_date >= fromDate) && (!toDate || payment.payment_date <= toDate);
+      const matchesSearch = !query || [payment.receipt_no, payment.student_name, payment.enrollment_no, payment.fee_category, payment.payment_method, payment.upi_reference_number]
+        .some(value => String(value || "").toLowerCase().includes(query));
+      return inDateRange && matchesSearch;
+    });
+  }, [payments, search, fromDate, toDate]);
 
   const updateField = (key: keyof FormState, value: string) => setForm(current => ({ ...current, [key]: value }));
 
@@ -305,7 +308,7 @@ export default function ManageFees() {
             <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
               <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div><CardTitle>Fee Records</CardTitle><CardDescription className="mt-1 text-gray-200">{payments.length} collections recorded</CardDescription></div>
-                <div className="relative w-full sm:max-w-sm"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" /><Input aria-label="Search fee records" placeholder="Search student, enrollment, receipt..." value={search} onChange={event => setSearch(event.target.value)} className="pl-9 border-white/30 bg-white/10 text-white placeholder:text-gray-300" /></div>
+                <div className="flex w-full flex-col gap-3 sm:max-w-2xl"><div className="relative w-full"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" /><Input aria-label="Search fee records" placeholder="Search student, enrollment, receipt, UPI reference..." value={search} onChange={event => setSearch(event.target.value)} className="pl-9 border-white/30 bg-white/10 text-white placeholder:text-gray-300" /></div><div className="grid grid-cols-2 gap-2"><div className="space-y-1"><Label htmlFor="fees-from-date" className="text-xs text-gray-200">From date</Label><Input id="fees-from-date" type="date" value={fromDate} max={toDate || undefined} onChange={event => setFromDate(event.target.value)} className="border-white/30 bg-white/10 text-white" /></div><div className="space-y-1"><Label htmlFor="fees-to-date" className="text-xs text-gray-200">To date</Label><Input id="fees-to-date" type="date" value={toDate} min={fromDate || undefined} onChange={event => setToDate(event.target.value)} className="border-white/30 bg-white/10 text-white" /></div></div></div>
               </CardHeader>
               <CardContent>
                 {loadError && <p role="alert" className="mb-4 rounded-md border border-red-300/30 bg-red-500/10 p-3 text-sm text-red-100">{loadError}</p>}
