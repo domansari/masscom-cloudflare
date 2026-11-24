@@ -2,6 +2,7 @@ import { confirmDeletePassword } from "./_delete-password.js";
 import { requireAdmin, sameOrigin } from "./_admin.js";
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
+const barcodeValueAllowed = value => [...value].every(character => character === "/" || /^[A-Za-z0-9 .$+%-]$/.test(character));
 const selectCards = `SELECT c.id, c.student_id, c.registration_no, c.created_at AS card_created_at,
   s.student_name, s.father_name, s.course_name, s.session_year, s.date_of_birth, s.phone,
   s.institute_name, s.roll_no AS student_roll_no, s.is_active AS student_active
@@ -48,17 +49,19 @@ export async function onRequest({ request, env }) {
       if (!student) return json({ error: "Student not found." }, 404);
       if (!student.is_active) return json({ error: "Restore this student before creating an ID card." }, 409);
       if (!student.roll_no) return json({ error: "Add a registration number to this student before creating an ID card." }, 400);
+      const registrationNo = student.roll_no.trim().toUpperCase();
+      if (!barcodeValueAllowed(registrationNo)) return json({ error: "The registration number must use letters, digits, spaces, hyphens, periods, slashes, $, + or % so the attendance barcode can encode it." }, 400);
       const cardId = crypto.randomUUID();
       await env.DB.prepare(`INSERT INTO student_id_cards (id, student_id, registration_no, created_by)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(student_id) DO UPDATE SET registration_no = excluded.registration_no, updated_at = CURRENT_TIMESTAMP`)
-        .bind(cardId, studentId, student.roll_no, account.adminId).run();
+        .bind(cardId, studentId, registrationNo, account.adminId).run();
       const saved = await env.DB.prepare(`${selectCards} WHERE c.student_id = ? LIMIT 1`).bind(studentId).first();
       return json({ success: true, data: saved }, 201);
     }
 
-    const registrationNo = typeof data?.registration_no === "string" ? data.registration_no.trim() : "";
-    if (!registrationNo || registrationNo.length > 64 || /[\x00-\x1f]/.test(registrationNo)) return json({ error: "Enter a registration number up to 64 characters." }, 400);
+    const registrationNo = typeof data?.registration_no === "string" ? data.registration_no.trim().toUpperCase() : "";
+    if (!registrationNo || registrationNo.length > 64 || !barcodeValueAllowed(registrationNo)) return json({ error: "Enter a registration number up to 64 characters using letters, digits, spaces, hyphens, periods, slashes, $, + or %." }, 400);
     const result = await env.DB.prepare("UPDATE student_id_cards SET registration_no = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(registrationNo, id).run();
     if (!result.meta.changes) return json({ error: "ID card not found." }, 404);
     const saved = await env.DB.prepare(`${selectCards} WHERE c.id = ? LIMIT 1`).bind(id).first();

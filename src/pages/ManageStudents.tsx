@@ -296,8 +296,8 @@ export default function ManageStudents() {
   const createIdCardPdf = async () => {
     if (!idCardPreviewRef.current) throw new Error("Select an ID card first.");
     const canvas = await html2canvas(idCardPreviewRef.current, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
-    const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: [85.6, 54] });
-    pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 85.6, 54);
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [54, 86] });
+    pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 54, 86);
     return pdf;
   };
 
@@ -454,8 +454,8 @@ export default function ManageStudents() {
         <div className="flex flex-wrap gap-2"><Button type="button" onClick={() => void printIdCard()} disabled={!printAllowed} className="bg-gradient-to-r from-emerald-600 to-green-700 text-white hover:from-emerald-700 hover:to-green-800">Print</Button><Button type="button" onClick={() => void downloadIdCard()} disabled={!printAllowed} className="bg-gradient-to-r from-blue-600 to-blue-800 text-white hover:from-blue-700 hover:to-blue-900">Download PDF</Button></div>
       </CardHeader><CardContent className="space-y-4">
         {idCardNotice && <p role="alert" className="text-sm text-red-200">{idCardNotice}</p>}
-        <div ref={idCardPreviewRef} className="mx-auto w-full max-w-[560px]">{selectedIdCard ? <StudentIdCard card={selectedIdCard} photoUrl={"/api/students/files?student_id=" + encodeURIComponent(selectedIdCard.student_id) + "&type=photo&preview=1"} /> : <div className="flex aspect-[1.586] w-full items-center justify-center rounded-2xl border border-dashed border-white/30 bg-white/5 text-gray-300">Select an ID card to preview</div>}</div>
-        {selectedIdCard && <div className="mx-auto flex max-w-[560px] flex-wrap items-center justify-between gap-3 rounded-lg border border-white/20 bg-white/5 p-3">
+        <div ref={idCardPreviewRef} className="mx-auto w-full max-w-[360px]">{selectedIdCard ? <StudentIdCard card={selectedIdCard} photoUrl={"/api/students/files?student_id=" + encodeURIComponent(selectedIdCard.student_id) + "&type=photo&preview=1"} /> : <div className="flex aspect-[1.586] w-full items-center justify-center rounded-2xl border border-dashed border-white/30 bg-white/5 text-gray-300">Select an ID card to preview</div>}</div>
+        {selectedIdCard && <div className="mx-auto flex max-w-[360px] flex-wrap items-center justify-between gap-3 rounded-lg border border-white/20 bg-white/5 p-3">
           <div className="text-sm text-white"><span className="font-semibold">Registration No.:</span> {selectedIdCard.registration_no}<span className={selectedIdCard.student_active ? "ml-3 text-emerald-300" : "ml-3 text-amber-200"}>{selectedIdCard.student_active ? "Active" : "Archived"}</span></div>
           <div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => { setIdCardRegistrationNo(selectedIdCard.registration_no); setIdCardEditing(value => !value); }}>{idCardEditing ? "Cancel edit" : "Edit"}</Button><Button type="button" size="sm" variant="destructive" onClick={() => { setCardToDelete(selectedIdCard); setCardDeletePassword(""); setCardDeleteError(""); }}>Delete</Button></div>
         </div>}
