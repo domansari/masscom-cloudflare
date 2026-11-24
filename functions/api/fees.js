@@ -2,8 +2,8 @@ import { confirmDeletePassword } from "./_delete-password.js";
 import { requireAdmin, sameOrigin } from "./_admin.js";
 import { buildEnrollmentNo } from "./_student-enrollment.js";
 
-const categories = ["Admission Fee", "Monthly Fee", "Exam Fee", "Other"];
-const methods = ["Cash", "UPI", "Bank Transfer", "Cheque"];
+const categories = ["Monthly Fee", "Admission Fee", "Reexam Fee", "Certificate Fee", "Issue Fee", "Other"];
+const methods = ["Cash", "UPI"];
 const json = (data, status = 200) => Response.json(data, {
   status,
   headers: { "Cache-Control": "no-store" },

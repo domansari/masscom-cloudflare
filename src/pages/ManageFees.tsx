@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { IndianRupee, Pencil, Search, X } from "lucide-react";
+import { ArrowLeft, IndianRupee, Pencil, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "react-router-dom";
 import { formatIndianDate } from "@/lib/date-format";
 
 type Student = {
@@ -22,8 +23,8 @@ type FormState = {
   student_id: string; fee_category: string; amount: string; payment_date: string;
   payment_method: string; period: string; notes: string;
 };
-const categories = ["Admission Fee", "Monthly Fee", "Exam Fee", "Other"];
-const methods = ["Cash", "UPI", "Bank Transfer", "Cheque"];
+const categories = ["Monthly Fee", "Admission Fee", "Reexam Fee", "Certificate Fee", "Issue Fee", "Other"];
+const methods = ["Cash", "UPI"];
 const today = new Date();
 const todayInput = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
 const freshForm = (): FormState => ({
@@ -46,6 +47,7 @@ export default function ManageFees() {
   const [editingId, setEditingId] = useState("");
   const [activeTab, setActiveTab] = useState("collect");
   const [search, setSearch] = useState("");
+  const [studentSearch, setStudentSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -72,6 +74,7 @@ export default function ManageFees() {
 
   const activeStudents = students.filter(student => student.is_active === 1);
   const selectedStudent = activeStudents.find(student => student.id === form.student_id);
+  const matchingStudents = activeStudents.filter(student => !studentSearch.trim() || String(student.roll_no || "").toLowerCase().includes(studentSearch.trim().toLowerCase()));
   const filteredPayments = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return payments;
@@ -86,6 +89,7 @@ export default function ManageFees() {
   const resetForm = () => {
     setForm(freshForm());
     setEditingId("");
+    setStudentSearch("");
   };
 
   const editPayment = (payment: FeePayment) => {
@@ -127,6 +131,9 @@ export default function ManageFees() {
       <div className="absolute inset-0 bg-black/40" />
       <main className="container relative z-10 mx-auto max-w-6xl px-4 py-8 sm:py-10">
         <header className="mb-6">
+          <Button asChild variant="outline" className="mb-5 border-white/30 bg-white/10 text-white hover:bg-white/20">
+            <Link to="/"><ArrowLeft className="mr-2 h-4 w-4" />Back to Dashboard</Link>
+          </Button>
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-lg">
               <IndianRupee className="h-6 w-6 text-white" aria-hidden="true" />
@@ -151,11 +158,14 @@ export default function ManageFees() {
               <CardContent>
                 <form onSubmit={submit} className="grid gap-5 sm:grid-cols-2">
                   <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="student-roll-search">Search by Roll Number</Label>
+                    <Input id="student-roll-search" type="search" disabled={Boolean(editingId)} placeholder="Enter student roll number" value={studentSearch} onChange={event => { setStudentSearch(event.target.value); updateField("student_id", ""); }} className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
                     <Label htmlFor="fee-student">Student *</Label>
                     <select id="fee-student" required disabled={Boolean(editingId)} value={form.student_id} onChange={event => updateField("student_id", event.target.value)} className="h-10 w-full rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white">
                       <option value="" className="text-slate-900">Select a student</option>
-                      {activeStudents.map(student => <option key={student.id} value={student.id} className="text-slate-900">{student.student_name} · {student.roll_no || "No roll number"}</option>)}
+                      {matchingStudents.map(student => <option key={student.id} value={student.id} className="text-slate-900">{student.roll_no || "No roll number"} · {student.student_name}</option>)}
                     </select>
+                    {studentSearch && matchingStudents.length === 0 && <p className="text-xs text-amber-200">No active student found with that roll number.</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="fee-category">Fee Type *</Label>
