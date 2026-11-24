@@ -13,7 +13,7 @@ type Student = {
   roll_no?: string | null; batch_code?: string | null; section_batch?: string | null; course_name?: string | null;
   session_year?: string | null; batch_timing?: string | null; admission_date?: string | null; date_of_birth?: string | null;
   phone?: string | null; email?: string | null; address?: string | null; aadhaar_last4?: string | null;
-  notes?: string | null; one_time_fee?: number | null; monthly_fee?: number | null; is_active: number;
+  notes?: string | null; is_active: number;
 };
 type Certificate = {
   id: string; certificate_id: string; student_name: string; father_name?: string | null;
@@ -27,7 +27,14 @@ type Sheet = {
   third_terminal: number | null; exam_course: keyof typeof examCourses;
   certificate_ref?: string | null;
 };
-type RecordResponse = { data: { student: Student; registration_no: string; marksheets: Sheet[]; certificates: Certificate[] } };
+type FeePlan = {
+  configured: boolean; total_amount: number; waived_amount?: number; paid_amount: number; pending_amount: number;
+  upcoming_amount: number; outstanding_amount?: number;
+  items: Array<{ id: string; description: string; period: string; due_date: string; amount: number; paid_amount: number;
+    remaining_amount: number; is_waived: boolean; status: "paid" | "pending" | "upcoming" | "waived";
+    receipts: Array<{ receipt_no: string; payment_date: string }> }>;
+};
+type RecordResponse = { data: { student: Student; registration_no: string; marksheets: Sheet[]; certificates: Certificate[]; fee_plan: FeePlan } };
 
 const money = (value?: number | null) => value == null ? "Not set" : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
 const field = (label: string, value?: string | number | null) => <div key={label} className="rounded-md border border-white/15 bg-white/5 p-3"><p className="text-xs text-gray-300">{label}</p><p className="mt-1 break-words font-medium text-white">{value || "—"}</p></div>;
@@ -66,7 +73,7 @@ export default function StudentCardView() {
   if (loading) return <main className="min-h-screen bg-slate-900 p-8 text-white">Loading student record…</main>;
   if (error || !record) return <main className="min-h-screen bg-slate-900 p-8 text-white"><p role="alert">{error || "Student record not found."}</p></main>;
 
-  const { student, marksheets, certificates } = record;
+  const { student, marksheets, certificates, fee_plan: feePlan } = record;
   const displayFields: Array<[string, string | number | null | undefined]> = [
     ["Father’s Name", student.father_name], ["Mother’s Name", student.mother_name],
     ["Enrollment No.", record.registration_no], ["Roll Number", student.roll_no],
@@ -76,7 +83,6 @@ export default function StudentCardView() {
     ["Gender / Category", [student.gender, student.category].filter(Boolean).join(" · ")],
     ["Aadhaar (last 4)", student.aadhaar_last4],
     ["Address", student.address], ["Notes", student.notes],
-    ["One-time Fees", money(student.one_time_fee)], ["Monthly Fees", money(student.monthly_fee)],
   ];
 
   return <div className="relative min-h-screen overflow-hidden bg-cover bg-center" style={{ backgroundImage: "url('/lovable-uploads/1c1f036d-97eb-4825-9766-e1ddb31b3f55.png')" }}>
@@ -94,6 +100,32 @@ export default function StudentCardView() {
           <div><CardTitle className="flex items-center gap-2 text-2xl text-white"><UserRound className="h-6 w-6" />{student.student_name}</CardTitle><CardDescription className="mt-2 text-gray-200">Student profile and academic records</CardDescription></div>
         </div></CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{displayFields.map(([label, value]) => field(label, value))}</CardContent>
+      </Card>
+
+      <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
+        <CardHeader><CardTitle className="flex items-center gap-2 text-white"><BookOpen className="h-5 w-5" />Complete Fee Plan</CardTitle>
+          <CardDescription className="text-gray-200">{feePlan.configured ? `${feePlan.items.length} fee plan item(s) · ${student.course_name || "Course"}` : "Fee plan details"}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!feePlan.configured && <p className="rounded-md border border-amber-300/30 bg-amber-400/10 p-3 text-sm text-amber-100">Fee plan is incomplete.</p>}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="rounded-md border border-white/15 bg-white/5 p-3"><p className="text-xs text-gray-300">Total Fees</p><p className="mt-1 font-semibold text-white">{money(feePlan.total_amount)}</p></div>
+            <div className="rounded-md border border-white/15 bg-white/5 p-3"><p className="text-xs text-gray-300">Paid</p><p className="mt-1 font-semibold text-emerald-300">{money(feePlan.paid_amount)}</p></div>
+            <div className="rounded-md border border-white/15 bg-white/5 p-3"><p className="text-xs text-gray-300">Due / Pending</p><p className="mt-1 font-semibold text-amber-200">{money(feePlan.pending_amount)}</p></div>
+            <div className="rounded-md border border-white/15 bg-white/5 p-3"><p className="text-xs text-gray-300">Upcoming</p><p className="mt-1 font-semibold text-red-200">{money(feePlan.upcoming_amount)}</p></div>
+            <div className="rounded-md border border-white/15 bg-white/5 p-3"><p className="text-xs text-gray-300">Remaining Total</p><p className="mt-1 font-semibold text-white">{money(feePlan.outstanding_amount ?? feePlan.pending_amount + feePlan.upcoming_amount)}</p></div>
+          </div>
+          {Number(feePlan.waived_amount || 0) > 0 && <p className="text-sm text-gray-200">Fee waived: <span className="font-semibold text-white">{money(feePlan.waived_amount)}</span></p>}
+          <div className="space-y-2">
+            {feePlan.items.length ? feePlan.items.map(item => <div key={item.id} className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-white/15 bg-white/5 p-3 text-sm">
+              <div className="min-w-0"><p className="font-semibold text-white">{item.description}{item.period ? " · " + item.period : ""}</p>
+                <p className="mt-1 text-gray-300">Due {formatIndianDate(item.due_date)} · {money(item.amount)}{item.paid_amount > 0 ? " · Paid " + money(item.paid_amount) : ""}{item.remaining_amount > 0 && item.paid_amount > 0 ? " · Balance " + money(item.remaining_amount) : ""}</p>
+                {item.receipts.map(receipt => <p key={receipt.receipt_no} className="mt-1 text-xs text-emerald-300">Receipt {receipt.receipt_no} · {formatIndianDate(receipt.payment_date)}</p>)}
+              </div>
+              <span className="inline-flex shrink-0 items-center gap-2 text-white"><span className={"h-2.5 w-2.5 rounded-full " + (item.status === "paid" ? "bg-emerald-400" : item.status === "pending" ? "bg-amber-300" : item.status === "upcoming" ? "bg-red-400" : "bg-gray-300")} />{item.status === "paid" ? "Paid" : item.status === "pending" ? "Pending" : item.status === "upcoming" ? "Upcoming" : "Waived"}</span>
+            </div>) : <p className="text-sm text-gray-300">No fee plan items are available.</p>}
+          </div>
+        </CardContent>
       </Card>
 
       <section className="space-y-4">

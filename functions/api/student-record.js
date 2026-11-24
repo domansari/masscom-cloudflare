@@ -1,3 +1,5 @@
+import { getStudentFeePlan } from "./_student-fee-plan.js";
+
 const json = (data, status = 200) => Response.json(data, {
   status,
   headers: { "Cache-Control": "no-store, max-age=0", "Pragma": "no-cache" },
@@ -16,7 +18,7 @@ export async function onRequest({ request, env }) {
       `SELECT c.student_id, c.registration_no, s.id, s.student_name, s.first_name, s.last_name,
         s.father_name, s.mother_name, s.gender, s.category, s.roll_no, s.batch_code, s.section_batch,
         s.course_name, s.session_year, s.batch_timing, s.admission_date, s.date_of_birth,
-        s.phone, s.email, s.address, s.aadhaar_last4, s.notes, s.one_time_fee, s.monthly_fee, s.is_active
+        s.phone, s.email, s.address, s.aadhaar_last4, s.notes, s.is_active
        FROM student_id_cards c JOIN students s ON s.id = c.student_id
        WHERE lower(trim(c.registration_no)) = lower(trim(?)) OR lower(trim(s.roll_no)) = lower(trim(?))
        ORDER BY CASE WHEN lower(trim(c.registration_no)) = lower(trim(?)) THEN 0 ELSE 1 END LIMIT 1`
@@ -45,7 +47,7 @@ export async function onRequest({ request, env }) {
     }
 
     const studentBatch = card.section_batch || card.batch_code;
-    const [certResult, sheetResult] = await Promise.all([
+    const [certResult, sheetResult, feePlan] = await Promise.all([
       env.DB.prepare(
         `SELECT id, certificate_id, student_name, father_name, course_name, duration, completion_date,
           grade, student_coordinator, roll_no, batch_number, instructor_name
@@ -62,6 +64,7 @@ export async function onRequest({ request, env }) {
          FROM marksheets WHERE lower(trim(student_name)) = lower(trim(?))
          ORDER BY updated_at DESC, id`
       ).bind(card.student_name).all(),
+      getStudentFeePlan(env, card),
     ]);
 
     const certificates = (certResult.results || []).filter(item =>
@@ -85,11 +88,12 @@ export async function onRequest({ request, env }) {
           course_name: card.course_name, session_year: card.session_year, batch_timing: card.batch_timing,
           admission_date: card.admission_date, date_of_birth: card.date_of_birth, phone: card.phone,
           email: card.email, address: card.address, aadhaar_last4: card.aadhaar_last4, notes: card.notes,
-          one_time_fee: card.one_time_fee, monthly_fee: card.monthly_fee, is_active: card.is_active,
+          is_active: card.is_active,
         },
         registration_no: card.registration_no,
         marksheets,
         certificates,
+        fee_plan: feePlan,
       },
     });
   } catch (error) {
@@ -99,6 +103,12 @@ export async function onRequest({ request, env }) {
     }
     if (/no such table: student_documents/i.test(message)) {
       return json({ error: "Student photo database setup is required." }, 503);
+    }
+    if (/no such table: student_fee_payment_allocations/i.test(message)) {
+      return json({ error: "Apply migrations/0017_fee_payment_allocations.sql in D1 to show the complete fee plan." }, 503);
+    }
+    if (/no such table: student_fee_plan_items/i.test(message)) {
+      return json({ error: "Apply migrations/0016_fee_plan.sql in D1 to show the complete fee plan." }, 503);
     }
     return json({ error: "Unable to load the student record" }, 500);
   }
