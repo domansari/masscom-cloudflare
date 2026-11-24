@@ -42,6 +42,7 @@ export async function onRequest({ request, env }) {
     const url = new URL(request.url);
     const studentId = url.searchParams.get("student_id");
     const type = url.searchParams.get("type");
+    const preview = url.searchParams.get("preview") === "1";
     if (!studentId || studentId.length > 128) return json({ error: "Invalid student ID" }, 400);
 
     if (method === "GET" && !type) {
@@ -65,10 +66,10 @@ export async function onRequest({ request, env }) {
         headers: {
           "Cache-Control": "private, no-store",
           "Content-Type": stored.content_type,
-          "Content-Disposition": `attachment; filename="${safeDownloadName(type, stored.content_type)}"`,
+          "Content-Disposition": `${preview && type === "photo" ? "inline" : "attachment"}; filename="${safeDownloadName(type, stored.content_type)}"`,
           "Content-Length": String(stored.file_size),
           "X-Content-Type-Options": "nosniff",
-          "Content-Security-Policy": "default-src 'none'; sandbox",
+          ...(!preview ? { "Content-Security-Policy": "default-src 'none'; sandbox" } : {}),
         },
       });
     }

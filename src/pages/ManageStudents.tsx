@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { Archive, ArrowLeft, Download, FileText, Pencil, Plus, RotateCcw, Search, Trash2, Users, X } from "lucide-react";
+import { Archive, ArrowLeft, Download, FileText, Image, Pencil, Plus, RotateCcw, Search, Trash2, Users, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,7 +59,7 @@ async function requestDocuments(studentId: string, method = "GET", type?: Docume
 const display = (value: string | number | null) => value == null || value === "" ? "—" : String(value);
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
-  return <section className="space-y-4"><h3 className="border-b pb-2 text-lg font-semibold">{title}</h3><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div></section>;
+  return <section className="space-y-4"><h3 className="border-b border-white/20 pb-2 text-lg font-semibold text-white">{title}</h3><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div></section>;
 }
 
 export default function ManageStudents() {
@@ -67,6 +67,7 @@ export default function ManageStudents() {
   const [students, setStudents] = useState<Student[]>([]);
   const [documents, setDocuments] = useState<StudentDocument[]>([]);
   const [documentFiles, setDocumentFiles] = useState<Record<DocumentType, File | null>>(emptyDocumentFiles);
+  const [selectedPhotoPreview, setSelectedPhotoPreview] = useState<string | null>(null);
   const [form, setForm] = useState<StudentForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -81,6 +82,13 @@ export default function ManageStudents() {
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void loadStudents(); }, [loadStudents]);
+  useEffect(() => {
+    const photo = documentFiles.photo;
+    if (!photo) { setSelectedPhotoPreview(null); return; }
+    const previewUrl = URL.createObjectURL(photo);
+    setSelectedPhotoPreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [documentFiles.photo]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -143,38 +151,50 @@ export default function ManageStudents() {
   };
 
   const field = (name: keyof StudentForm, label: string, required = false, type = "text", hint?: string) => <div className="space-y-2" key={name}>
-    <Label htmlFor={name}>{label}{required ? " *" : ""}</Label>
-    <Input id={name} type={type} value={form[name] == null ? "" : String(form[name])} onChange={event => updateField(name, event.target.value)} required={required} />
-    {hint && <p className="text-xs text-slate-500">{hint}</p>}
+    <Label htmlFor={name} className="text-white">{label}{required ? " *" : ""}</Label>
+    <Input id={name} type={type} value={form[name] == null ? "" : String(form[name])} onChange={event => updateField(name, event.target.value)} required={required} className="border-white/30 bg-white/20 text-white placeholder:text-gray-300" />
+    {hint && <p className="text-xs text-gray-200">{hint}</p>}
   </div>;
+  const savedPhoto = editingId && documents.some(document => document.document_type === "photo")
+    ? `/api/students/files?student_id=${encodeURIComponent(editingId)}&type=photo&preview=1`
+    : null;
+  const photoPreview = selectedPhotoPreview || savedPhoto;
 
-  return <main className="container mx-auto max-w-7xl px-4 py-8">
+  return <div className="relative min-h-screen overflow-hidden" style={{ backgroundImage: "url('/lovable-uploads/1c1f036d-97eb-4825-9766-e1ddb31b3f55.png')", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}>
+    <div className="absolute inset-0 bg-black/40" />
+    <nav className="relative z-10 border-b border-white/20 bg-white/10 shadow-sm backdrop-blur-lg">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <Link to="/" className="flex items-center space-x-3 text-white transition-colors hover:text-gray-200"><ArrowLeft className="h-5 w-5" /><span>Back to Home</span></Link>
+        <h1 className="text-xl font-semibold text-white">Manage Students</h1>
+        <div className="w-24" />
+      </div>
+    </nav>
+    <main className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-      <div><Button asChild variant="ghost" className="mb-2 px-0 text-white hover:bg-white/10 hover:text-white"><Link to="/"><ArrowLeft className="mr-2 h-4 w-4" />Dashboard</Link></Button>
-        <h1 className="text-3xl font-bold text-white">Manage Students</h1><p className="mt-1 text-sm text-slate-300">Add, search, update, archive, and restore student records.</p></div>
-      <div className="rounded-lg border border-white/15 bg-white/10 px-4 py-3 text-sm text-white"><Users className="mr-2 inline h-4 w-4" />{students.filter(student => student.is_active).length} active students</div>
+      <div><h2 className="text-3xl font-bold text-white">Manage Students</h2><p className="mt-1 text-sm text-gray-200">Add, search, update, archive, and restore student records.</p></div>
+      <div className="rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-sm text-white backdrop-blur-lg"><Users className="mr-2 inline h-4 w-4" />{students.filter(student => student.is_active).length} active students</div>
     </div>
 
-    <Card className="mb-6 border-white/20 bg-white/95"><CardHeader>
-      <CardTitle>{editingId ? "Edit Student Record" : "New Student"}</CardTitle>
-      <CardDescription>Fields marked * are required. Only the last four Aadhaar digits are stored.</CardDescription>
+    <Card className="mb-6 border-white/20 bg-white/10 backdrop-blur-lg"><CardHeader>
+      <CardTitle className="text-white">{editingId ? "Edit Student Record" : "New Student"}</CardTitle>
+      <CardDescription className="text-gray-200">Fields marked * are required. Only the last four Aadhaar digits are stored.</CardDescription>
     </CardHeader><CardContent><form onSubmit={submit} className="space-y-7">
       <Section title="Student Details">
         {field("first_name", "First Name", true)}{field("last_name", "Last Name")}{field("father_name", "Father’s Name", true)}
         {field("mother_name", "Mother’s Name")}{field("date_of_birth", "Date of Birth", true, "date")}
-        <div className="space-y-2"><Label htmlFor="gender">Gender</Label><select id="gender" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.gender || "Male"} onChange={event => updateField("gender", event.target.value)}><option>Male</option><option>Female</option><option>Other</option></select></div>
-        <div className="space-y-2"><Label htmlFor="category">Category</Label><select id="category" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.category || ""} onChange={event => updateField("category", event.target.value)}><option value="">Select category</option>{["General", "OBC", "SC", "ST", "EWS", "Other"].map(item => <option key={item}>{item}</option>)}</select></div>
+        <div className="space-y-2"><Label htmlFor="gender" className="text-white">Gender</Label><select id="gender" className="h-10 w-full rounded-md border border-white/30 bg-white/20 px-3 text-sm text-white" value={form.gender || "Male"} onChange={event => updateField("gender", event.target.value)}><option className="text-gray-900">Male</option><option className="text-gray-900">Female</option><option className="text-gray-900">Other</option></select></div>
+        <div className="space-y-2"><Label htmlFor="category" className="text-white">Category</Label><select id="category" className="h-10 w-full rounded-md border border-white/30 bg-white/20 px-3 text-sm text-white" value={form.category || ""} onChange={event => updateField("category", event.target.value)}><option value="" className="text-gray-900">Select category</option>{["General", "OBC", "SC", "ST", "EWS", "Other"].map(item => <option key={item} className="text-gray-900">{item}</option>)}</select></div>
         {field("aadhaar_last4", "Aadhaar (last 4 digits)", false, "text", "Do not enter the full Aadhaar number.")}
         {field("phone", "Mobile Number", false, "tel")}{field("email", "Email", false, "email")}
-        <div className="space-y-2 sm:col-span-2 lg:col-span-3"><Label htmlFor="address">Address</Label><Textarea id="address" value={form.address || ""} onChange={event => updateField("address", event.target.value)} rows={2} /></div>
+        <div className="space-y-2 sm:col-span-2 lg:col-span-3"><Label htmlFor="address" className="text-white">Address</Label><Textarea id="address" className="border-white/30 bg-white/20 text-white placeholder:text-gray-300" value={form.address || ""} onChange={event => updateField("address", event.target.value)} rows={2} /></div>
       </Section>
 
       <Section title="Course / Class">
         {field("institute_name", "Institute Name", false, "text", "Defaults to Masscom Infotech Education.")}
-        <div className="space-y-2"><Label htmlFor="course_name">Course / Class *</Label><select id="course_name" required className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.course_name || ""} onChange={event => updateField("course_name", event.target.value)}>
-          <option value="">Select certificate course</option>
-          {editingId && form.course_name && !certificateCourseOptions.includes(form.course_name) && <option value={form.course_name}>{form.course_name} (existing record)</option>}
-          {certificateCourseOptions.map(course => <option key={course} value={course}>{course}</option>)}
+        <div className="space-y-2"><Label htmlFor="course_name" className="text-white">Course / Class *</Label><select id="course_name" required className="h-10 w-full rounded-md border border-white/30 bg-white/20 px-3 text-sm text-white" value={form.course_name || ""} onChange={event => updateField("course_name", event.target.value)}>
+          <option value="" className="text-gray-900">Select certificate course</option>
+          {editingId && form.course_name && !certificateCourseOptions.includes(form.course_name) && <option className="text-gray-900" value={form.course_name}>{form.course_name} (existing record)</option>}
+          {certificateCourseOptions.map(course => <option className="text-gray-900" key={course} value={course}>{course}</option>)}
         </select></div>
         {field("session_year", "Session Year")}{field("roll_no", "Roll Number", false, "text", "Leave blank if you will assign it later.")}
         {field("section_batch", "Section / Batch")}{field("admission_date", "Admission Date", false, "date")}
@@ -185,45 +205,51 @@ export default function ManageStudents() {
         {field("monthly_fee", "Monthly Fee (₹)", false, "number", "Record the monthly fee for this student.")}
       </Section>
 
-      <section className="space-y-4"><h3 className="border-b pb-2 text-lg font-semibold">Student Photo</h3>
-        <p className="text-sm text-slate-600">A student photo is required. Use JPG, PNG, or WebP, up to 5 MB.</p>
+      <section className="space-y-4"><h3 className="border-b border-white/20 pb-2 text-lg font-semibold text-white">Student Photo</h3>
+        <p className="text-sm text-gray-200">A student photo is required. Use JPG, PNG, or WebP, up to 5 MB.</p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[documentField].map(item => {
           const current = documents.find(document => document.document_type === item.type);
-          return <div className="space-y-2 rounded-md border p-3" key={item.type}>
-            <Label htmlFor={`file-${item.type}`}>{item.label} *</Label>
+          return <div className="flex flex-wrap items-start gap-4 rounded-md border border-white/20 bg-white/5 p-3 sm:col-span-2 lg:col-span-3" key={item.type}>
+            <div className="flex h-40 w-32 shrink-0 items-center justify-center overflow-hidden rounded-md border border-white/30 bg-white/10">
+              {photoPreview ? <img src={photoPreview} alt="Student photo preview" className="h-full w-full object-cover" /> : <div className="flex flex-col items-center gap-2 text-gray-300"><Image className="h-8 w-8" /><span className="text-xs">Photo preview</span></div>}
+            </div>
+            <div className="min-w-0 flex-1 space-y-2">
+            <Label htmlFor={`file-${item.type}`} className="text-white">{item.label} *</Label>
             {current && editingId && <div className="flex items-center justify-between gap-2 text-xs text-slate-600">
-              <span className="flex min-w-0 items-center gap-1 truncate"><FileText className="h-3.5 w-3.5 shrink-0" />{current.file_name}</span>
-              <div className="flex shrink-0 gap-1"><a className="inline-flex items-center rounded border px-2 py-1 hover:bg-slate-50" href={`/api/students/files?student_id=${encodeURIComponent(editingId)}&type=${item.type}`} aria-label={`Download ${item.label}`}><Download className="h-3.5 w-3.5" /></a>
+              <span className="flex min-w-0 items-center gap-1 truncate text-gray-200"><FileText className="h-3.5 w-3.5 shrink-0" />{current.file_name}</span>
+              <div className="flex shrink-0 gap-1"><a className="inline-flex items-center rounded border border-white/30 px-2 py-1 text-white hover:bg-white/10" href={`/api/students/files?student_id=${encodeURIComponent(editingId)}&type=${item.type}`} aria-label={`Download ${item.label}`}><Download className="h-3.5 w-3.5" /></a>
                 <Button type="button" size="sm" variant="outline" aria-label={`Delete ${item.label}`} onClick={async () => { try { await requestDocuments(editingId, "DELETE", item.type); await loadDocuments(editingId); toast({ title: `${item.label} deleted` }); } catch (cause) { toast({ title: "Could not delete document", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" }); } }}><Trash2 className="h-3.5 w-3.5" /></Button></div>
             </div>}
-            <Input id={`file-${item.type}`} type="file" accept={item.accept} required={!current} onChange={event => setDocumentFiles(currentFiles => ({ ...currentFiles, [item.type]: event.target.files?.[0] || null }))} />
-            {documentFiles[item.type] && <p className="truncate text-xs text-slate-500">Selected: {documentFiles[item.type]?.name}</p>}
+            <Input id={`file-${item.type}`} type="file" accept={item.accept} required={!current} className="border-white/30 bg-white/20 text-white file:text-gray-900" onChange={event => setDocumentFiles(currentFiles => ({ ...currentFiles, [item.type]: event.target.files?.[0] || null }))} />
+            {documentFiles[item.type] && <p className="truncate text-xs text-gray-200">Selected: {documentFiles[item.type]?.name}</p>}
+            </div>
           </div>;
         })}</div>
       </section>
-      <div className="space-y-2"><Label htmlFor="notes">Notes</Label><Textarea id="notes" value={form.notes || ""} onChange={event => updateField("notes", event.target.value)} rows={2} /></div>
+      <div className="space-y-2"><Label htmlFor="notes" className="text-white">Notes</Label><Textarea id="notes" className="border-white/30 bg-white/20 text-white placeholder:text-gray-300" value={form.notes || ""} onChange={event => updateField("notes", event.target.value)} rows={2} /></div>
       <div className="flex flex-wrap gap-2"><Button type="submit" disabled={saving}><Plus className="mr-2 h-4 w-4" />{saving ? "Saving…" : editingId ? "Save Changes" : "Add Student"}</Button>
         {editingId && <Button type="button" variant="outline" onClick={resetForm}><X className="mr-2 h-4 w-4" />Cancel Edit</Button>}
       </div>
     </form></CardContent></Card>
 
-    <Card className="border-white/20 bg-white/95"><CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div><CardTitle>Student Records</CardTitle><CardDescription>Search by name, roll number, batch, course, session, or contact.</CardDescription></div>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={includeArchived} onChange={event => setIncludeArchived(event.target.checked)} />Show archived students</label>
+    <Card className="border-white/20 bg-white/10 backdrop-blur-lg"><CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div><CardTitle className="text-white">Student Records</CardTitle><CardDescription className="text-gray-200">Search by name, roll number, batch, course, session, or contact.</CardDescription></div>
+      <label className="flex items-center gap-2 text-sm text-white"><input type="checkbox" checked={includeArchived} onChange={event => setIncludeArchived(event.target.checked)} />Show archived students</label>
     </CardHeader><CardContent>
-      <div className="relative mb-4 max-w-md"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" /><Input className="pl-9" placeholder="Search student records" value={search} onChange={event => setSearch(event.target.value)} /></div>
-      {error && <p role="alert" className="mb-3 text-sm text-red-700">{error}</p>}
-      {loading ? <p className="py-8 text-center text-slate-500">Loading student records…</p> : filtered.length === 0 ? <p className="py-8 text-center text-slate-500">No student records found.</p> :
-        <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead><tr className="border-b text-slate-500"><th className="px-3 py-3">Student</th><th className="px-3 py-3">Roll / Batch</th><th className="px-3 py-3">Course / Session</th><th className="px-3 py-3">Phone / Email</th><th className="px-3 py-3">Status</th><th className="px-3 py-3 text-right">Actions</th></tr></thead>
-          <tbody>{filtered.map(student => <tr key={student.id} className="border-b last:border-0">
-            <td className="px-3 py-3 font-medium">{student.student_name}<div className="text-xs font-normal text-slate-500">Father: {display(student.father_name)}</div></td>
-            <td className="px-3 py-3">{display(student.roll_no)}<div className="text-xs text-slate-500">{display(student.section_batch || student.batch_code)}</div></td>
-            <td className="px-3 py-3">{display(student.course_name)}<div className="text-xs text-slate-500">{display(student.session_year)}</div></td>
-            <td className="px-3 py-3">{display(student.phone)}<div className="text-xs text-slate-500">{display(student.email)}</div></td>
-            <td className="px-3 py-3"><span className={student.is_active ? "text-emerald-700" : "text-slate-500"}>{student.is_active ? "Active" : "Archived"}</span></td>
+      <div className="relative mb-4 max-w-md"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" /><Input className="border-white/30 bg-white/20 pl-9 text-white placeholder:text-gray-300" placeholder="Search student records" value={search} onChange={event => setSearch(event.target.value)} /></div>
+      {error && <p role="alert" className="mb-3 text-sm text-red-200">{error}</p>}
+      {loading ? <p className="py-8 text-center text-gray-200">Loading student records…</p> : filtered.length === 0 ? <p className="py-8 text-center text-gray-200">No student records found.</p> :
+        <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm text-white"><thead><tr className="border-b border-white/20 text-gray-200"><th className="px-3 py-3">Student</th><th className="px-3 py-3">Roll / Batch</th><th className="px-3 py-3">Course / Session</th><th className="px-3 py-3">Phone / Email</th><th className="px-3 py-3">Status</th><th className="px-3 py-3 text-right">Actions</th></tr></thead>
+          <tbody>{filtered.map(student => <tr key={student.id} className="border-b border-white/10 last:border-0">
+            <td className="px-3 py-3 font-medium">{student.student_name}<div className="text-xs font-normal text-gray-300">Father: {display(student.father_name)}</div></td>
+            <td className="px-3 py-3">{display(student.roll_no)}<div className="text-xs text-gray-300">{display(student.section_batch || student.batch_code)}</div></td>
+            <td className="px-3 py-3">{display(student.course_name)}<div className="text-xs text-gray-300">{display(student.session_year)}</div></td>
+            <td className="px-3 py-3">{display(student.phone)}<div className="text-xs text-gray-300">{display(student.email)}</div></td>
+            <td className="px-3 py-3"><span className={student.is_active ? "text-emerald-300" : "text-gray-300"}>{student.is_active ? "Active" : "Archived"}</span></td>
             <td className="px-3 py-3"><div className="flex justify-end gap-2">{student.is_active && <Button size="sm" variant="outline" onClick={() => edit(student)} aria-label={`Edit ${student.student_name}`}><Pencil className="h-4 w-4" /></Button>}
               {student.is_active ? <Button size="sm" variant="outline" onClick={() => setActive(student, false)} aria-label={`Archive ${student.student_name}`}><Archive className="h-4 w-4" /></Button> : <Button size="sm" variant="outline" onClick={() => setActive(student, true)} aria-label={`Restore ${student.student_name}`}><RotateCcw className="h-4 w-4" /></Button>}</div></td>
           </tr>)}</tbody></table></div>}
     </CardContent></Card>
-  </main>;
+    </main>
+  </div>;
 }
