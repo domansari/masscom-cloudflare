@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEffect, useState } from "react";
-import { Clock, Database, FileText, Shield, Users, type LucideIcon } from "lucide-react";
+import { Clock, Database, FileText, IndianRupee, Shield, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const clockFormat = new Intl.DateTimeFormat("en-IN", {
@@ -58,6 +58,15 @@ const modules: Array<{
     Icon: Database,
     iconClass: "bg-gradient-to-br from-cyan-500 to-cyan-700",
     actionClass: "bg-gradient-to-r from-cyan-600 to-cyan-800 hover:from-cyan-700 hover:to-cyan-900",
+  },
+  {
+    title: "Manage Fees",
+    description: "Collect student fees and manage payment records.",
+    action: "Open Fee Management",
+    to: "/fees",
+    Icon: IndianRupee,
+    iconClass: "bg-gradient-to-br from-emerald-500 to-emerald-700",
+    actionClass: "bg-gradient-to-r from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800",
   },
   {
     title: "Students",

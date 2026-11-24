@@ -1,0 +1,229 @@
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { IndianRupee, Pencil, Search, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import { formatIndianDate } from "@/lib/date-format";
+
+type Student = {
+  id: string; student_name: string; roll_no: string | null; batch_code: string | null;
+  section_batch: string | null; session_year: string | null; course_name: string | null;
+  one_time_fee: number | null; monthly_fee: number | null; is_active: number;
+};
+type FeePayment = {
+  id: string; receipt_no: string; student_id: string | null; student_name: string;
+  enrollment_no: string | null; fee_category: string; amount: number; payment_date: string;
+  payment_method: string; period: string | null; notes: string | null;
+};
+type FormState = {
+  student_id: string; fee_category: string; amount: string; payment_date: string;
+  payment_method: string; period: string; notes: string;
+};
+const categories = ["Admission Fee", "Monthly Fee", "Exam Fee", "Other"];
+const methods = ["Cash", "UPI", "Bank Transfer", "Cheque"];
+const today = new Date();
+const todayInput = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
+const freshForm = (): FormState => ({
+  student_id: "", fee_category: "Monthly Fee", amount: "", payment_date: todayInput,
+  payment_method: "Cash", period: "", notes: "",
+});
+const currency = (value: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(value);
+
+async function readJson(response: Response) {
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "Unable to complete the fee request.");
+  return result;
+}
+
+export default function ManageFees() {
+  const { toast } = useToast();
+  const [students, setStudents] = useState<Student[]>([]);
+  const [payments, setPayments] = useState<FeePayment[]>([]);
+  const [form, setForm] = useState<FormState>(freshForm);
+  const [editingId, setEditingId] = useState("");
+  const [activeTab, setActiveTab] = useState("collect");
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState("");
+
+  const loadData = async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const [studentsResponse, feesResponse] = await Promise.all([
+        fetch("/api/students", { cache: "no-store" }),
+        fetch("/api/fees", { cache: "no-store" }),
+      ]);
+      const [studentsData, feesData] = await Promise.all([readJson(studentsResponse), readJson(feesResponse)]);
+      setStudents(studentsData.data || []);
+      setPayments(feesData.data || []);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Unable to load fee records.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void loadData(); }, []);
+
+  const activeStudents = students.filter(student => student.is_active === 1);
+  const selectedStudent = activeStudents.find(student => student.id === form.student_id);
+  const filteredPayments = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return payments;
+    return payments.filter(payment =>
+      [payment.receipt_no, payment.student_name, payment.enrollment_no, payment.fee_category, payment.payment_method]
+        .some(value => String(value || "").toLowerCase().includes(query))
+    );
+  }, [payments, search]);
+
+  const updateField = (key: keyof FormState, value: string) => setForm(current => ({ ...current, [key]: value }));
+
+  const resetForm = () => {
+    setForm(freshForm());
+    setEditingId("");
+  };
+
+  const editPayment = (payment: FeePayment) => {
+    setEditingId(payment.id);
+    setForm({
+      student_id: payment.student_id || "", fee_category: payment.fee_category,
+      amount: String(payment.amount), payment_date: payment.payment_date,
+      payment_method: payment.payment_method, period: payment.period || "", notes: payment.notes || "",
+    });
+    setActiveTab("collect");
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/fees${editingId ? `?id=${encodeURIComponent(editingId)}` : ""}`, {
+        method: editingId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const result = await readJson(response);
+      await loadData();
+      if (!editingId) {
+        toast({ title: "Fee collected", description: `Receipt ${result.receipt_no} · ${currency(Number(form.amount))}` });
+      } else toast({ title: "Fee record updated" });
+      resetForm();
+      setActiveTab("manage");
+    } catch (error) {
+      toast({ title: editingId ? "Could not update fee" : "Could not collect fee", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="relative min-h-screen overflow-hidden">
+      <div className="absolute inset-0 bg-black/40" />
+      <main className="container relative z-10 mx-auto max-w-6xl px-4 py-8 sm:py-10">
+        <header className="mb-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-lg">
+              <IndianRupee className="h-6 w-6 text-white" aria-hidden="true" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-white">Manage Fees</h1>
+              <p className="mt-1 text-sm text-gray-200">Collect and manage student fee payments.</p>
+            </div>
+          </div>
+        </header>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="h-auto rounded-lg border border-white/20 bg-black/20 p-1 shadow-sm backdrop-blur-lg">
+            <TabsTrigger value="collect" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=inactive]:text-white">Collect</TabsTrigger>
+            <TabsTrigger value="manage" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=inactive]:text-white">Manage</TabsTrigger>
+          </TabsList>
+          <TabsContent value="collect" className="mt-0">
+            <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
+              <CardHeader>
+                <CardTitle>Collect Fee</CardTitle>
+                <CardDescription className="text-gray-200">{editingId ? "Update the selected fee entry." : "Record a fee payment received from a student."}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={submit} className="grid gap-5 sm:grid-cols-2">
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="fee-student">Student *</Label>
+                    <select id="fee-student" required disabled={Boolean(editingId)} value={form.student_id} onChange={event => updateField("student_id", event.target.value)} className="h-10 w-full rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white">
+                      <option value="" className="text-slate-900">Select a student</option>
+                      {activeStudents.map(student => <option key={student.id} value={student.id} className="text-slate-900">{student.student_name} · {student.roll_no || "No roll number"}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="fee-category">Fee Type *</Label>
+                    <select id="fee-category" required value={form.fee_category} onChange={event => updateField("fee_category", event.target.value)} className="h-10 w-full rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white">
+                      {categories.map(item => <option key={item} className="text-slate-900">{item}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="fee-amount">Amount (₹) *</Label>
+                    <Input id="fee-amount" type="number" min="0.01" step="0.01" required value={form.amount} onChange={event => updateField("amount", event.target.value)} className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
+                    {selectedStudent && <p className="text-xs text-gray-300">Recorded one-time fee: {selectedStudent.one_time_fee == null ? "—" : currency(selectedStudent.one_time_fee)} · Monthly fee: {selectedStudent.monthly_fee == null ? "—" : currency(selectedStudent.monthly_fee)}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="fee-date">Payment Date *</Label>
+                    <Input id="fee-date" type="date" lang="en-IN" required value={form.payment_date} onChange={event => updateField("payment_date", event.target.value)} className="border-white/30 bg-white/10 text-white" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="fee-method">Payment Method *</Label>
+                    <select id="fee-method" required value={form.payment_method} onChange={event => updateField("payment_method", event.target.value)} className="h-10 w-full rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white">
+                      {methods.map(item => <option key={item} className="text-slate-900">{item}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="fee-period">Month / Period</Label>
+                    <Input id="fee-period" maxLength={40} placeholder="For example, November 2026" value={form.period} onChange={event => updateField("period", event.target.value)} className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
+                  </div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="fee-notes">Notes</Label>
+                    <Input id="fee-notes" maxLength={500} value={form.notes} onChange={event => updateField("notes", event.target.value)} className="border-white/30 bg-white/10 text-white" />
+                  </div>
+                  <div className="flex flex-wrap gap-2 sm:col-span-2">
+                    <Button type="submit" disabled={busy || loading || !activeStudents.length} className="bg-gradient-to-r from-emerald-500 to-emerald-700 text-white hover:from-emerald-600 hover:to-emerald-800">
+                      {busy ? "Saving…" : editingId ? "Update Fee" : "Save Collection"}
+                    </Button>
+                    {editingId && <Button type="button" variant="outline" onClick={resetForm}><X className="mr-2 h-4 w-4" />Cancel Edit</Button>}
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="manage" className="mt-0">
+            <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
+              <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div><CardTitle>Fee Records</CardTitle><CardDescription className="mt-1 text-gray-200">{payments.length} collections recorded</CardDescription></div>
+                <div className="relative w-full sm:max-w-sm"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" /><Input aria-label="Search fee records" placeholder="Search student, enrollment, receipt..." value={search} onChange={event => setSearch(event.target.value)} className="pl-9 border-white/30 bg-white/10 text-white placeholder:text-gray-300" /></div>
+              </CardHeader>
+              <CardContent>
+                {loadError && <p role="alert" className="mb-4 rounded-md border border-red-300/30 bg-red-500/10 p-3 text-sm text-red-100">{loadError}</p>}
+                {loading ? <p className="py-8 text-center text-gray-200">Loading fee records…</p> : filteredPayments.length === 0 ? <p className="py-8 text-center text-gray-200">{payments.length ? "No matching fee records." : "No fee collections have been recorded yet."}</p> : (
+                  <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-sm">
+                    <thead><tr className="border-b border-white/20 text-gray-200"><th className="px-3 py-3">Receipt</th><th className="px-3 py-3">Date</th><th className="px-3 py-3">Student</th><th className="px-3 py-3">Enrollment No.</th><th className="px-3 py-3">Type / Period</th><th className="px-3 py-3">Method</th><th className="px-3 py-3 text-right">Amount</th><th className="px-3 py-3">Action</th></tr></thead>
+                    <tbody>{filteredPayments.map(payment => <tr key={payment.id} className="border-b border-white/10 text-white">
+                      <td className="px-3 py-3 font-medium">{payment.receipt_no}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">{formatIndianDate(payment.payment_date)}</td>
+                      <td className="px-3 py-3">{payment.student_name}</td>
+                      <td className="px-3 py-3">{payment.enrollment_no || "—"}</td>
+                      <td className="px-3 py-3">{payment.fee_category}{payment.period ? <div className="text-xs text-gray-300">{payment.period}</div> : null}</td>
+                      <td className="px-3 py-3">{payment.payment_method}</td>
+                      <td className="px-3 py-3 text-right font-semibold">{currency(payment.amount)}</td>
+                      <td className="px-3 py-3"><Button type="button" variant="outline" size="sm" onClick={() => editPayment(payment)}><Pencil className="mr-2 h-4 w-4" />Edit</Button></td>
+                    </tr>)}</tbody>
+                  </table></div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </main>
+    </div>
+  );
+}
