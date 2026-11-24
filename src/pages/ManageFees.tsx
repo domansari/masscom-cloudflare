@@ -60,6 +60,8 @@ export default function ManageFees() {
   const [receiptForView, setReceiptForView] = useState<FeeReceipt | null>(null);
   const [planItemId, setPlanItemId] = useState("");
   const [planItemIds, setPlanItemIds] = useState<string[]>([]);
+  const [admissionFeePaid, setAdmissionFeePaid] = useState<boolean | null>(null);
+  const [admissionFeeCheckError, setAdmissionFeeCheckError] = useState("");
   const [deletingId, setDeletingId] = useState("");
 
   const loadData = async () => {
@@ -81,6 +83,34 @@ export default function ManageFees() {
   };
 
   useEffect(() => { void loadData(); }, []);
+  useEffect(() => {
+    const studentId = form.student_id;
+    if (!studentId) { setAdmissionFeePaid(null); setAdmissionFeeCheckError(""); return; }
+    let active = true;
+    setAdmissionFeePaid(null);
+    setAdmissionFeeCheckError("");
+    fetch("/api/student-fee-plan?student_id=" + encodeURIComponent(studentId), { cache: "no-store" })
+      .then(async response => { const result = await response.json(); if (!response.ok) throw new Error(result.error || "Unable to verify admission fee."); return result.data; })
+      .then(plan => {
+        if (!active) return;
+        const admissionFee = (plan?.items || []).find((item: { fee_category: string }) => item.fee_category === "Admission Fee");
+        const paid = !admissionFee || Number(admissionFee.remaining_amount) <= 0.001;
+        setAdmissionFeePaid(paid);
+        if (!paid) {
+          setForm(current => current.student_id === studentId && current.fee_category === "Monthly Fee"
+            ? { ...current, fee_category: "Admission Fee", amount: String(admissionFee.remaining_amount), period: "" }
+            : current);
+          setPlanItemId("");
+          setPlanItemIds([]);
+        }
+      })
+      .catch(error => {
+        if (!active) return;
+        setAdmissionFeePaid(false);
+        setAdmissionFeeCheckError(error instanceof Error ? error.message : "Unable to verify admission fee.");
+      });
+    return () => { active = false; };
+  }, [form.student_id]);
 
   useEffect(() => {
     const receiptId = searchParams.get("receipt");
@@ -305,8 +335,9 @@ export default function ManageFees() {
                   <div className="space-y-2">
                     <Label htmlFor="fee-category">Fee Type *</Label>
                     <select id="fee-category" required value={form.fee_category} onChange={event => updateField("fee_category", event.target.value)} className="h-10 w-full rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white">
-                      {categories.map(item => <option key={item} className="text-slate-900">{item}</option>)}
+                      {categories.map(item => <option key={item} disabled={item === "Monthly Fee" && admissionFeePaid !== true} className="text-slate-900">{item}</option>)}
                     </select>
+                    {form.student_id && admissionFeePaid !== true && <p role="status" className="text-xs text-amber-200">{admissionFeeCheckError || (admissionFeePaid === null ? "Checking admission fee…" : "Admission Fee must be fully paid before Monthly Fee can be collected.")}</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="fee-amount">Amount (₹) *</Label>

@@ -1,6 +1,7 @@
 import { confirmDeletePassword } from "./_delete-password.js";
 import { requireAdmin, sameOrigin } from "./_admin.js";
 import { buildEnrollmentNo } from "./_student-enrollment.js";
+import { getStudentFeePlan } from "./_student-fee-plan.js";
 
 const categories = ["Monthly Fee", "Admission Fee", "Reexam Fee", "Certificate Issue Fee", "Other"];
 const methods = ["Cash", "UPI"];
@@ -61,7 +62,7 @@ export async function onRequest({ request, env }) {
       const studentId = typeof data.student_id === "string" ? data.student_id.trim() : "";
       if (!studentId || studentId.length > 128) return json({ error: "Select a valid student." }, 400);
       const student = await env.DB.prepare(
-        "SELECT id, student_name, roll_no, batch_code, section_batch, session_year, is_active FROM students WHERE id = ? LIMIT 1"
+        "SELECT * FROM students WHERE id = ? LIMIT 1"
       ).bind(studentId).first();
       if (!student) return json({ error: "Student not found." }, 404);
       if (!student.is_active) return json({ error: "Restore this student before collecting a fee." }, 409);
@@ -100,6 +101,14 @@ export async function onRequest({ request, env }) {
           return json({ error: "Payment amount is greater than the remaining fee plan balance." }, 400);
         }
       }
+      const includesMonthly = payment.fee_category === "Monthly Fee" || allocations.some(allocation => allocation.item.fee_category === "Monthly Fee");
+      if (includesMonthly) {
+        const feePlan = await getStudentFeePlan(env, student);
+        const admissionFee = feePlan.items.find(item => item.fee_category === "Admission Fee");
+        if (admissionFee && admissionFee.remaining_amount > 0.001) {
+          return json({ error: "Pay the full Admission Fee before collecting any Monthly Fee." }, 409);
+        }
+      }
       const id = crypto.randomUUID();
       const receiptNo = "FEE-" + new Date().getFullYear() + "-" + id.slice(0, 8).toUpperCase();
       const insertPayment = env.DB.prepare(
@@ -125,6 +134,16 @@ export async function onRequest({ request, env }) {
       const original = await env.DB.prepare("SELECT amount, fee_category FROM fee_payments WHERE id = ?").bind(id).first();
       if (!original || Number(original.amount) !== payment.amount || original.fee_category !== payment.fee_category) {
         return json({ error: "The total or fee type of an allocated receipt cannot be changed. Delete it and collect again if needed." }, 409);
+      }
+    }
+    if (payment.fee_category === "Monthly Fee" && linkedPayment?.student_id) {
+      const student = await env.DB.prepare("SELECT * FROM students WHERE id = ? LIMIT 1").bind(linkedPayment.student_id).first();
+      if (student) {
+        const feePlan = await getStudentFeePlan(env, student);
+        const admissionFee = feePlan.items.find(item => item.fee_category === "Admission Fee");
+        if (admissionFee && admissionFee.remaining_amount > 0.001) {
+          return json({ error: "Pay the full Admission Fee before collecting any Monthly Fee." }, 409);
+        }
       }
     }
     if (linkedPayment?.fee_plan_item_id) {
