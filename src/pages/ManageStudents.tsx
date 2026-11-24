@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { Archive, ArrowLeft, Download, Eye, FileText, Image, Edit, Plus, RotateCcw, Search, Trash2, Users, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Archive, ArrowLeft, CreditCard, Download, Eye, FileText, Image, Edit, Plus, RotateCcw, Search, Trash2, Users, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { certificateCourseOptions } from "../../functions/api/_exam-courses.js";
 import StudentPreview from "./StudentPreview";
+import StudentIdCard, { type StudentIdCardRecord } from "@/components/StudentIdCard";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 type Student = {
   id: string; student_name: string; first_name: string | null; last_name: string | null;
@@ -58,6 +61,16 @@ async function requestDocuments(studentId: string, method = "GET", type?: Docume
   return data;
 }
 
+async function requestIdCards(method = "GET", id?: string, body?: object) {
+  const url = "/api/student-id-cards" + (id ? "?id=" + encodeURIComponent(id) : "");
+  const response = await fetch(url, {
+    method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Unable to complete the ID card request.");
+  return data;
+}
+
 const display = (value: string | number | null) => value == null || value === "" ? "—" : String(value);
 
 function Section({ title, children, id }: { title: string; children: ReactNode; id?: string }) {
@@ -77,8 +90,21 @@ export default function ManageStudents() {
   const [selectedPhotoPreview, setSelectedPhotoPreview] = useState<string | null>(null);
   const [form, setForm] = useState<StudentForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"new" | "manage" | "preview">("new");
+  const [activeTab, setActiveTab] = useState<"new" | "manage" | "preview" | "id-card">("new");
   const [previewStudentId, setPreviewStudentId] = useState<string | null>(null);
+  const [idCards, setIdCards] = useState<StudentIdCardRecord[]>([]);
+  const [selectedIdCardId, setSelectedIdCardId] = useState<string | null>(null);
+  const [idCardStudentToCreate, setIdCardStudentToCreate] = useState("");
+  const [idCardLoading, setIdCardLoading] = useState(false);
+  const [idCardBusy, setIdCardBusy] = useState(false);
+  const [idCardEditing, setIdCardEditing] = useState(false);
+  const [idCardRegistrationNo, setIdCardRegistrationNo] = useState("");
+  const [idCardNotice, setIdCardNotice] = useState("");
+  const [cardToDelete, setCardToDelete] = useState<StudentIdCardRecord | null>(null);
+  const [cardDeletePassword, setCardDeletePassword] = useState("");
+  const [cardDeleteError, setCardDeleteError] = useState("");
+  const [cardDeleting, setCardDeleting] = useState(false);
+  const idCardPreviewRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -100,6 +126,21 @@ export default function ManageStudents() {
     setSearchParams({}, { replace: true });
     if (focusFees) window.setTimeout(() => document.getElementById("student-fees")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
   }, [students, searchParams]);
+  useEffect(() => {
+    if (activeTab !== "id-card") return;
+    let active = true;
+    setIdCardLoading(true);
+    requestIdCards().then(result => {
+      if (!active) return;
+      const records = result.data || [];
+      setIdCards(records);
+      setSelectedIdCardId(current => records.some(card => card.id === current) ? current : records[0]?.id || null);
+    }).catch(cause => {
+      if (active) setIdCardNotice(cause instanceof Error ? cause.message : "Unable to load ID cards.");
+    }).finally(() => { if (active) setIdCardLoading(false); });
+    return () => { active = false; };
+  }, [activeTab]);
+
   useEffect(() => {
     const photo = documentFiles.photo;
     if (!photo) { setSelectedPhotoPreview(null); return; }
@@ -124,6 +165,7 @@ export default function ManageStudents() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving) return;
+    const createIdCard = (event.nativeEvent as SubmitEvent).submitter?.getAttribute("data-create-id-card") === "true";
     setSaving(true);
     try {
       const studentName = [form.first_name, form.last_name].filter(Boolean).join(" ").trim();
@@ -143,7 +185,21 @@ export default function ManageStudents() {
       } else {
         toast({ title: editingId ? "Student record updated" : "Student added" });
         resetForm();
-        setActiveTab("manage");
+        if (createIdCard) {
+          try {
+            const savedCard = await requestIdCards("POST", undefined, { student_id: studentId });
+            setIdCards(current => [savedCard.data, ...current.filter(card => card.id !== savedCard.data.id)]);
+            setSelectedIdCardId(savedCard.data.id);
+            setIdCardRegistrationNo(savedCard.data.registration_no);
+            setIdCardEditing(false);
+            setIdCardNotice("");
+            setActiveTab("id-card");
+            toast({ title: "ID card ready", description: savedCard.data.registration_no });
+          } catch (cause) {
+            setActiveTab("id-card");
+            toast({ title: "Student saved; ID card could not be created", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" });
+          }
+        } else setActiveTab("manage");
       }
     } catch (cause) {
       toast({ title: "Could not save student", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" });
@@ -183,6 +239,96 @@ export default function ManageStudents() {
     finally { setDeleting(false); }
   };
 
+  const selectIdCard = (card: StudentIdCardRecord) => {
+    setSelectedIdCardId(card.id);
+    setIdCardRegistrationNo(card.registration_no);
+    setIdCardEditing(false);
+    setIdCardNotice("");
+  };
+
+  const createIdCardForStudent = async () => {
+    if (!idCardStudentToCreate || idCardBusy) return;
+    setIdCardBusy(true); setIdCardNotice("");
+    try {
+      const saved = await requestIdCards("POST", undefined, { student_id: idCardStudentToCreate });
+      const records = await requestIdCards();
+      setIdCards(records.data || []);
+      setSelectedIdCardId(saved.data.id);
+      setIdCardRegistrationNo(saved.data.registration_no);
+      setIdCardStudentToCreate("");
+      toast({ title: "ID card created", description: saved.data.registration_no });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Unable to create ID card.";
+      setIdCardNotice(message);
+      toast({ title: "Could not create ID card", description: message, variant: "destructive" });
+    } finally { setIdCardBusy(false); }
+  };
+
+  const saveIdCardEdit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedIdCard || idCardBusy) return;
+    setIdCardBusy(true); setIdCardNotice("");
+    try {
+      const result = await requestIdCards("PUT", selectedIdCard.id, { registration_no: idCardRegistrationNo });
+      setIdCards(current => current.map(card => card.id === result.data.id ? result.data : card));
+      setIdCardEditing(false);
+      toast({ title: "ID card updated", description: result.data.registration_no });
+    } catch (cause) {
+      setIdCardNotice(cause instanceof Error ? cause.message : "Unable to update ID card.");
+    } finally { setIdCardBusy(false); }
+  };
+
+  const confirmIdCardDelete = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!cardToDelete || !cardDeletePassword || cardDeleting) return;
+    setCardDeleting(true); setCardDeleteError("");
+    try {
+      await requestIdCards("DELETE", cardToDelete.id, { password: cardDeletePassword });
+      setIdCards(current => current.filter(card => card.id !== cardToDelete.id));
+      if (selectedIdCardId === cardToDelete.id) { setSelectedIdCardId(null); setIdCardEditing(false); setIdCardRegistrationNo(""); }
+      setCardToDelete(null); setCardDeletePassword("");
+      toast({ title: "ID card deleted" });
+    } catch (cause) {
+      setCardDeleteError(cause instanceof Error ? cause.message : "Unable to delete ID card.");
+    } finally { setCardDeleting(false); }
+  };
+
+  const createIdCardPdf = async () => {
+    if (!idCardPreviewRef.current) throw new Error("Select an ID card first.");
+    const canvas = await html2canvas(idCardPreviewRef.current, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
+    const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: [85.6, 54] });
+    pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 85.6, 54);
+    return pdf;
+  };
+
+  const printIdCard = async () => {
+    if (!selectedIdCard || !selectedIdCard.student_active || idCardBusy) return;
+    setIdCardBusy(true);
+    try {
+      const pdf = await createIdCardPdf();
+      pdf.autoPrint();
+      const url = URL.createObjectURL(pdf.output("blob"));
+      const printWindow = window.open(url, "_blank");
+      if (!printWindow) toast({ title: "Allow pop-ups to print the ID card." });
+      window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
+    } catch (cause) { toast({ title: "Could not prepare ID card", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" }); }
+    finally { setIdCardBusy(false); }
+  };
+
+  const downloadIdCard = async () => {
+    if (!selectedIdCard || !selectedIdCard.student_active || idCardBusy) return;
+    setIdCardBusy(true);
+    try {
+      const pdf = await createIdCardPdf();
+      pdf.save("Masscom-ID-" + selectedIdCard.registration_no.replace(/[^a-z0-9_-]/gi, "-") + ".pdf");
+    } catch (cause) { toast({ title: "Could not download ID card", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" }); }
+    finally { setIdCardBusy(false); }
+  };
+
+  const selectedIdCard = idCards.find(card => card.id === selectedIdCardId) || null;
+  const studentsWithoutCards = students.filter(student => student.is_active && !idCards.some(card => card.student_id === student.id));
+  const printAllowed = Boolean(selectedIdCard?.student_active && !idCardBusy);
+
   const field = (name: keyof StudentForm, label: string, required = false, type = "text", hint?: string) => <div className="space-y-2" key={name}>
     <Label htmlFor={name} className="text-white">{label}{required ? " *" : ""}</Label>
     <Input id={name} type={type} value={form[name] == null ? "" : String(form[name])} onChange={event => updateField(name, event.target.value)} required={required} className="border-white/30 bg-white/20 text-white placeholder:text-gray-300" />
@@ -212,6 +358,7 @@ export default function ManageStudents() {
       <button type="button" role="tab" id="new-student-tab" aria-selected={activeTab === "new"} aria-controls="new-student-panel" onClick={() => setActiveTab("new")} className={activeTab === "new" ? "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm" : "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15"}>New Student</button>
       <button type="button" role="tab" id="manage-students-tab" aria-selected={activeTab === "manage"} aria-controls="manage-students-panel" onClick={() => setActiveTab("manage")} className={activeTab === "manage" ? "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm" : "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15"}>Manage Students</button>
       <button type="button" role="tab" id="preview-student-tab" aria-selected={activeTab === "preview"} aria-controls="preview-student-panel" onClick={() => setActiveTab("preview")} className={activeTab === "preview" ? "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm" : "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15"}>Preview</button>
+      <button type="button" role="tab" id="id-card-tab" aria-selected={activeTab === "id-card"} aria-controls="id-card-panel" onClick={() => setActiveTab("id-card")} className={activeTab === "id-card" ? "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm" : "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15"}>ID Card</button>
     </div>
 
     {activeTab === "new" && <section role="tabpanel" id="new-student-panel" aria-labelledby="new-student-tab">
@@ -267,7 +414,8 @@ export default function ManageStudents() {
         })}</div>
       </section>
       <div className="space-y-2"><Label htmlFor="notes" className="text-white">Notes</Label><Textarea id="notes" className="border-white/30 bg-white/20 text-white placeholder:text-gray-300" value={form.notes || ""} onChange={event => updateField("notes", event.target.value)} rows={2} /></div>
-      <div className="flex flex-wrap gap-2"><Button type="submit" disabled={saving}><Plus className="mr-2 h-4 w-4" />{saving ? "Saving…" : editingId ? "Save Changes" : "Add Student"}</Button>
+      <div className="flex flex-wrap gap-2"><Button type="submit" disabled={saving}><Plus className="mr-2 h-4 w-4" />{saving ? "Saving…" : editingId ? "Save Changes" : "Save Student"}</Button>
+        <Button type="submit" data-create-id-card="true" disabled={saving} className="bg-gradient-to-r from-indigo-600 to-violet-700 text-white hover:from-indigo-700 hover:to-violet-800"><CreditCard className="mr-2 h-4 w-4" />{saving ? "Saving…" : "Save & Generate ID Card"}</Button>
         {editingId && <Button type="button" variant="outline" onClick={resetForm}><X className="mr-2 h-4 w-4" />Cancel Edit</Button>}
       </div>
     </form></CardContent></Card>
@@ -301,10 +449,33 @@ export default function ManageStudents() {
     {activeTab === "preview" && <section role="tabpanel" id="preview-student-panel" aria-labelledby="preview-student-tab">
       {previewStudentId ? <StudentPreview studentId={previewStudentId} embedded /> : <Card aria-label="Student preview is empty" className="min-h-64 border-white/20 bg-white/10 backdrop-blur-lg"><CardContent className="min-h-64" /></Card>}
     </section>}
+    {activeTab === "id-card" && <section role="tabpanel" id="id-card-panel" aria-labelledby="id-card-tab" className="space-y-6">
+      <Card className="border-white/20 bg-white/10 backdrop-blur-lg"><CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle className="text-white">ID Card Preview</CardTitle><CardDescription className="text-gray-200">Select an ID card below to preview it. Registration number is the card’s primary identifier.</CardDescription></div>
+        <div className="flex flex-wrap gap-2"><Button type="button" onClick={() => void printIdCard()} disabled={!printAllowed} className="bg-gradient-to-r from-emerald-600 to-green-700 text-white hover:from-emerald-700 hover:to-green-800">Print</Button><Button type="button" onClick={() => void downloadIdCard()} disabled={!printAllowed} className="bg-gradient-to-r from-blue-600 to-blue-800 text-white hover:from-blue-700 hover:to-blue-900">Download PDF</Button></div>
+      </CardHeader><CardContent className="space-y-4">
+        {idCardNotice && <p role="alert" className="text-sm text-red-200">{idCardNotice}</p>}
+        <div ref={idCardPreviewRef} className="mx-auto w-full max-w-[560px]">{selectedIdCard ? <StudentIdCard card={selectedIdCard} photoUrl={"/api/students/files?student_id=" + encodeURIComponent(selectedIdCard.student_id) + "&type=photo&preview=1"} /> : <div className="flex aspect-[1.586] w-full items-center justify-center rounded-2xl border border-dashed border-white/30 bg-white/5 text-gray-300">Select an ID card to preview</div>}</div>
+        {selectedIdCard && <div className="mx-auto flex max-w-[560px] flex-wrap items-center justify-between gap-3 rounded-lg border border-white/20 bg-white/5 p-3">
+          <div className="text-sm text-white"><span className="font-semibold">Registration No.:</span> {selectedIdCard.registration_no}<span className={selectedIdCard.student_active ? "ml-3 text-emerald-300" : "ml-3 text-amber-200"}>{selectedIdCard.student_active ? "Active" : "Archived"}</span></div>
+          <div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => { setIdCardRegistrationNo(selectedIdCard.registration_no); setIdCardEditing(value => !value); }}>{idCardEditing ? "Cancel edit" : "Edit"}</Button><Button type="button" size="sm" variant="destructive" onClick={() => { setCardToDelete(selectedIdCard); setCardDeletePassword(""); setCardDeleteError(""); }}>Delete</Button></div>
+        </div>}
+        {idCardEditing && selectedIdCard && <form onSubmit={saveIdCardEdit} className="mx-auto flex max-w-[560px] flex-wrap items-end gap-3 rounded-lg border border-white/20 bg-white/5 p-3"><div className="min-w-48 flex-1 space-y-2"><Label htmlFor="id-card-registration-no" className="text-white">Registration No.</Label><Input id="id-card-registration-no" value={idCardRegistrationNo} onChange={event => setIdCardRegistrationNo(event.target.value)} required maxLength={64} className="border-white/30 bg-white/20 text-white" /></div><Button type="submit" disabled={idCardBusy}>{idCardBusy ? "Saving…" : "Save changes"}</Button></form>}
+      </CardContent></Card>
+
+      <Card className="border-white/20 bg-white/10 backdrop-blur-lg"><CardHeader><CardTitle className="text-white">Manage ID Cards</CardTitle><CardDescription className="text-gray-200">Student archive status is reflected automatically on the linked ID card.</CardDescription></CardHeader><CardContent className="space-y-5">
+        <div className="flex flex-wrap items-end gap-3 rounded-lg border border-white/20 bg-white/5 p-3"><div className="min-w-56 flex-1 space-y-2"><Label htmlFor="id-card-student" className="text-white">Create ID card for an existing student</Label><select id="id-card-student" value={idCardStudentToCreate} onChange={event => setIdCardStudentToCreate(event.target.value)} className="h-10 w-full rounded-md border border-white/30 bg-white/20 px-3 text-sm text-white"><option value="" className="text-gray-900">Select student</option>{studentsWithoutCards.map(student => <option key={student.id} value={student.id} className="text-gray-900">{student.student_name} · {student.roll_no || "No registration no."}</option>)}</select></div><Button type="button" disabled={!idCardStudentToCreate || idCardBusy} onClick={() => void createIdCardForStudent()} className="bg-gradient-to-r from-indigo-600 to-violet-700 text-white hover:from-indigo-700 hover:to-violet-800"><CreditCard className="mr-2 h-4 w-4"/>{idCardBusy ? "Creating…" : "Create ID Card"}</Button></div>
+        {idCardLoading ? <p className="py-6 text-center text-gray-200">Loading ID cards…</p> : idCards.length === 0 ? <p className="py-6 text-center text-gray-200">No ID cards created yet.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm text-white"><thead><tr className="border-b border-white/20 text-gray-200"><th className="px-3 py-3">Student</th><th className="px-3 py-3">Registration No.</th><th className="px-3 py-3">Course</th><th className="px-3 py-3">Status</th><th className="px-3 py-3 text-right">Actions</th></tr></thead><tbody>{idCards.map(card => <tr key={card.id} onClick={() => selectIdCard(card)} aria-selected={selectedIdCardId === card.id} className={selectedIdCardId === card.id ? "cursor-pointer border-b border-white/10 bg-white/15" : "cursor-pointer border-b border-white/10 hover:bg-white/10"}><td className="px-3 py-3 font-medium">{card.student_name}<div className="text-xs text-gray-300">Father: {display(card.father_name)}</div></td><td className="px-3 py-3 font-semibold">{card.registration_no}</td><td className="px-3 py-3">{display(card.course_name)}</td><td className={card.student_active ? "px-3 py-3 text-emerald-300" : "px-3 py-3 text-amber-200"}>{card.student_active ? "Active" : "Archived"}</td><td className="px-3 py-3"><div className="inline-flex justify-end gap-1" onClick={event => event.stopPropagation()}><Button size="sm" aria-label="Edit ID card" title="Edit ID card" onClick={() => { selectIdCard(card); setIdCardEditing(true); }} className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-blue-500 to-blue-700 text-white shadow-lg transition-all duration-300 hover:scale-105 hover:from-blue-600 hover:to-blue-800"><Edit className="h-4 w-4"/></Button><Button size="sm" aria-label="Delete ID card" title="Delete ID card" onClick={() => { selectIdCard(card); setCardToDelete(card); setCardDeletePassword(""); setCardDeleteError(""); }} className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-red-500 to-red-700 text-white shadow-lg transition-all duration-300 hover:scale-105 hover:from-red-600 hover:to-red-800"><Trash2 className="h-4 w-4"/></Button></div></td></tr>)}</tbody></table></div>}
+      </CardContent></Card>
+    </section>}
+
     </main>
     <Dialog open={Boolean(studentToDelete)} onOpenChange={open => { if (!open && !deleting) { setStudentToDelete(null); setDeletePassword(""); setDeleteError(""); } }}>
       <DialogContent><DialogHeader><DialogTitle>Delete Student Permanently</DialogTitle><DialogDescription>This permanently deletes {studentToDelete?.student_name || "this student"} and their stored photo. Certificate and marksheet records are kept.</DialogDescription></DialogHeader>
         <form onSubmit={confirmDelete} className="space-y-4"><div className="space-y-2"><Label htmlFor="student-delete-password">Confirm your admin login password</Label><Input id="student-delete-password" type="password" autoComplete="current-password" value={deletePassword} onChange={event => { setDeletePassword(event.target.value); setDeleteError(""); }} required maxLength={1024} />{deleteError && <p role="alert" className="text-sm text-destructive">{deleteError}</p>}</div><DialogFooter><Button type="button" variant="outline" onClick={() => setStudentToDelete(null)} disabled={deleting}>Cancel</Button><Button type="submit" variant="destructive" disabled={!deletePassword || deleting}>{deleting ? "Deleting…" : "Delete permanently"}</Button></DialogFooter></form>
+      </DialogContent></Dialog>
+    <Dialog open={Boolean(cardToDelete)} onOpenChange={open => { if (!open && !cardDeleting) { setCardToDelete(null); setCardDeletePassword(""); setCardDeleteError(""); } }}>
+      <DialogContent><DialogHeader><DialogTitle>Delete ID Card</DialogTitle><DialogDescription>Permanently delete the ID card for {cardToDelete?.student_name || "this student"}? The student record will remain.</DialogDescription></DialogHeader>
+        <form onSubmit={confirmIdCardDelete} className="space-y-4"><div className="space-y-2"><Label htmlFor="id-card-delete-password">Confirm your admin login password</Label><Input id="id-card-delete-password" type="password" autoComplete="current-password" value={cardDeletePassword} onChange={event => { setCardDeletePassword(event.target.value); setCardDeleteError(""); }} required maxLength={1024} />{cardDeleteError && <p role="alert" className="text-sm text-destructive">{cardDeleteError}</p>}</div><DialogFooter><Button type="button" variant="outline" onClick={() => setCardToDelete(null)} disabled={cardDeleting}>Cancel</Button><Button type="submit" variant="destructive" disabled={!cardDeletePassword || cardDeleting}>{cardDeleting ? "Deleting…" : "Delete ID Card"}</Button></DialogFooter></form>
       </DialogContent></Dialog>
   </div>;
 }

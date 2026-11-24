@@ -36,6 +36,7 @@ const App = () => (
               <Route path="/marksheets/manage" element={<ProtectedRoute><MarkSheets manage /></ProtectedRoute>} />
               <Route path="/students" element={<ProtectedRoute><ManageStudents /></ProtectedRoute>} />
               <Route path="/students/:id/preview" element={<ProtectedRoute><StudentPreview /></ProtectedRoute>} />
+              <Route path="/student-record" element={<ProtectedRoute><StudentPreview /></ProtectedRoute>} />
               <Route 
                 path="/" 
                 element={
