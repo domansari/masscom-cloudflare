@@ -15,6 +15,7 @@ import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Header from "./components/Header";
 import MarkSheets from "./pages/MarkSheets";
+import ManageStudents from "./pages/ManageStudents";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +33,7 @@ const App = () => (
               <Route path="/verify" element={<VerifyCertificate />} />
               <Route path="/marksheets" element={<ProtectedRoute><MarkSheets /></ProtectedRoute>} />
               <Route path="/marksheets/manage" element={<ProtectedRoute><MarkSheets manage /></ProtectedRoute>} />
+              <Route path="/students" element={<ProtectedRoute><ManageStudents /></ProtectedRoute>} />
               <Route 
                 path="/" 
                 element={

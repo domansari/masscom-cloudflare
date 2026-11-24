@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { FileText, Search, Plus, Settings, Shield, Cpu, Database, Clock } from "lucide-react";
+import { FileText, Search, Plus, Settings, Shield, Cpu, Database, Clock, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const clockFormat = new Intl.DateTimeFormat("en-IN", {
@@ -93,6 +93,21 @@ const Index = () => {
             <CardContent>
               <Button asChild className="w-full bg-gradient-to-r from-cyan-600 to-cyan-800 hover:from-cyan-700 hover:to-cyan-900" size="lg">
                 <Link to="/marksheets">Create Mark Sheet</Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-xl transition-all duration-300 bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-indigo-700 shadow-lg">
+                <Users className="h-8 w-8 text-white" aria-hidden="true" />
+              </div>
+              <CardTitle className="text-xl text-white">Manage Students</CardTitle>
+              <CardDescription className="text-gray-300">Add, search, update, and archive student records.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild className="w-full bg-indigo-700 hover:bg-indigo-800" size="lg">
+                <Link to="/students">Open Student Records</Link>
               </Button>
             </CardContent>
           </Card>
