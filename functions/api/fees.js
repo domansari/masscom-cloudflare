@@ -70,6 +70,9 @@ export async function onRequest({ request, env }) {
       const allocationIds = Array.isArray(data.fee_plan_item_ids)
         ? [...new Set(data.fee_plan_item_ids.filter(value => typeof value === "string").map(value => value.trim()).filter(Boolean))]
         : [];
+      if (payment.fee_category === "Monthly Fee" && !planItemId && !allocationIds.length) {
+        return json({ error: "Select the unpaid month or months this Monthly Fee payment covers." }, 400);
+      }
       if (allocationIds.length > 200 || (planItemId && allocationIds.length)) return json({ error: "Select a valid set of fee plan installments." }, 400);
       let allocations = [];
       if (allocationIds.length) {
@@ -77,6 +80,11 @@ export async function onRequest({ request, env }) {
           "SELECT * FROM student_fee_plan_items WHERE id = ? AND student_id = ? AND is_active = 1"
         ).bind(itemId, studentId).first()));
         if (planItems.some(item => !item || Number(item.is_waived))) return json({ error: "One or more selected fee plan items are no longer payable." }, 409);
+        const itemCategories = [...new Set(planItems.map(item => item.fee_category))];
+        if ((itemCategories.length === 1 && payment.fee_category !== itemCategories[0]) ||
+            (itemCategories.length > 1 && payment.fee_category !== "Other")) {
+          return json({ error: "Payment fee type must match the selected fee plan items." }, 409);
+        }
         allocations = await Promise.all(planItems.map(async item => {
           const totals = await env.DB.prepare(
             `SELECT
@@ -88,9 +96,15 @@ export async function onRequest({ request, env }) {
         }));
         allocations = allocations.filter(allocation => allocation.amount > 0.001);
         const allocationTotal = allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
-        if (!allocations.length || Math.abs(allocationTotal - payment.amount) > 0.01) {
-          return json({ error: "The payment amount must equal the remaining balance of the selected installments." }, 400);
+        if (!allocations.length || payment.amount > allocationTotal + 0.001) {
+          return json({ error: "Payment amount cannot exceed the selected months' remaining balances." }, 400);
         }
+        let amountToAllocate = payment.amount;
+        allocations = allocations.sort((a, b) => a.item.due_date.localeCompare(b.item.due_date)).map(allocation => {
+          const amount = Math.min(allocation.amount, amountToAllocate);
+          amountToAllocate = Math.max(0, amountToAllocate - amount);
+          return { ...allocation, amount };
+        }).filter(allocation => allocation.amount > 0.001);
       } else if (planItemId) {
         const planItem = await env.DB.prepare("SELECT * FROM student_fee_plan_items WHERE id = ? AND student_id = ? AND is_active = 1").bind(planItemId, studentId).first();
         if (!planItem || Number(planItem.is_waived) || planItem.fee_category !== payment.fee_category || (planItem.period || "") !== (payment.period || "")) {
@@ -130,6 +144,67 @@ export async function onRequest({ request, env }) {
 
     const linkedPayment = await env.DB.prepare("SELECT id, student_id, fee_plan_item_id FROM fee_payments WHERE id = ?").bind(id).first();
     const allocationsForPayment = await env.DB.prepare("SELECT COUNT(*) AS count FROM student_fee_payment_allocations WHERE payment_id = ?").bind(id).first();
+    const requestedAllocationIds = Array.isArray(data.fee_plan_item_ids)
+      ? [...new Set(data.fee_plan_item_ids.filter(value => typeof value === "string").map(value => value.trim()).filter(Boolean))]
+      : [];
+    if (requestedAllocationIds.length > 200) return json({ error: "Select at most 200 fee plan installments." }, 400);
+    if (requestedAllocationIds.length) {
+      if (!linkedPayment) return json({ error: "Fee record not found." }, 404);
+      if (linkedPayment.fee_plan_item_id || Number(allocationsForPayment?.count || 0) > 0) {
+        return json({ error: "This receipt is already linked to a fee plan and cannot be reassigned." }, 409);
+      }
+      const planItems = await Promise.all(requestedAllocationIds.map(itemId => env.DB.prepare(
+        "SELECT * FROM student_fee_plan_items WHERE id = ? AND student_id = ? AND is_active = 1"
+      ).bind(itemId, linkedPayment?.student_id).first()));
+      if (planItems.some(item => !item || Number(item.is_waived))) {
+        return json({ error: "One or more selected fee plan items are no longer payable." }, 409);
+      }
+      const itemCategories = [...new Set(planItems.map(item => item.fee_category))];
+      if ((itemCategories.length === 1 && payment.fee_category !== itemCategories[0]) ||
+          (itemCategories.length > 1 && payment.fee_category !== "Other")) {
+        return json({ error: "Payment fee type must match the selected fee plan items." }, 409);
+      }
+      if (itemCategories.includes("Monthly Fee")) {
+        const student = await env.DB.prepare("SELECT * FROM students WHERE id = ? LIMIT 1").bind(linkedPayment.student_id).first();
+        const feePlan = student ? await getStudentFeePlan(env, student) : null;
+        const admissionFee = feePlan?.items.find(item => item.fee_category === "Admission Fee");
+        if (admissionFee && admissionFee.remaining_amount > 0.001) {
+          return json({ error: "Pay the full Admission Fee before collecting any Monthly Fee." }, 409);
+        }
+      }
+      const allocations = await Promise.all(planItems.map(async item => {
+        const totals = await env.DB.prepare(
+          `SELECT
+            COALESCE((SELECT SUM(amount) FROM fee_payments WHERE fee_plan_item_id = ? AND id <> ?), 0) +
+            COALESCE((SELECT SUM(a.amount) FROM student_fee_payment_allocations a JOIN fee_payments p ON p.id = a.payment_id WHERE a.fee_plan_item_id = ? AND p.id <> ?), 0) AS paid`
+        ).bind(item.id, id, item.id, id).first();
+        return { item, amount: Math.max(0, Number(item.amount) - Number(totals?.paid || 0)) };
+      }));
+      let payable = allocations.filter(allocation => allocation.amount > 0.001);
+      const total = payable.reduce((sum, allocation) => sum + allocation.amount, 0);
+      if (!payable.length || payment.amount > total + 0.001) {
+        return json({ error: "Receipt amount cannot exceed the selected months' remaining balances." }, 400);
+      }
+      let amountToAllocate = payment.amount;
+      payable = payable.sort((a, b) => a.item.due_date.localeCompare(b.item.due_date)).map(allocation => {
+        const amount = Math.min(allocation.amount, amountToAllocate);
+        amountToAllocate = Math.max(0, amountToAllocate - amount);
+        return { ...allocation, amount };
+      }).filter(allocation => allocation.amount > 0.001);
+      const update = env.DB.prepare(
+        `UPDATE fee_payments SET fee_category = ?, amount = ?, payment_date = ?,
+         payment_method = ?, upi_reference_number = ?, period = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+      ).bind(payment.fee_category, payment.amount, payment.payment_date, payment.payment_method,
+        payment.upi_reference_number, payment.period, payment.notes, id);
+      const statements = [update, ...payable.map(allocation => env.DB.prepare(
+        "INSERT INTO student_fee_payment_allocations (id, payment_id, fee_plan_item_id, amount) VALUES (?, ?, ?, ?)"
+      ).bind(crypto.randomUUID(), id, allocation.item.id, allocation.amount))];
+      await env.DB.batch(statements);
+      return json({ success: true, id, allocations: payable.map(({ item, amount }) => ({ period: item.period, amount })) });
+    }
+    if (payment.fee_category === "Monthly Fee" && !linkedPayment?.fee_plan_item_id && Number(allocationsForPayment?.count || 0) === 0) {
+      return json({ error: "Select the unpaid month or months this Monthly Fee receipt covers." }, 400);
+    }
     if (Number(allocationsForPayment?.count || 0) > 0) {
       const original = await env.DB.prepare("SELECT amount, fee_category FROM fee_payments WHERE id = ?").bind(id).first();
       if (!original || Number(original.amount) !== payment.amount || original.fee_category !== payment.fee_category) {

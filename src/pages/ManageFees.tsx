@@ -15,6 +15,7 @@ type Student = {
   section_batch: string | null; session_year: string | null; course_name: string | null;
   one_time_fee: number | null; monthly_fee: number | null; is_active: number;
 };
+type FeePlanMonth = { id: string; fee_category: string; description: string; period: string; due_date: string; amount: number; remaining_amount: number; is_waived: boolean; status: string };
 type FeePayment = {
   id: string; receipt_no: string; student_id: string | null; student_name: string;
   enrollment_no: string | null; fee_category: string; amount: number; payment_date: string;
@@ -62,6 +63,8 @@ export default function ManageFees() {
   const [planItemIds, setPlanItemIds] = useState<string[]>([]);
   const [admissionFeePaid, setAdmissionFeePaid] = useState<boolean | null>(null);
   const [admissionFeeCheckError, setAdmissionFeeCheckError] = useState("");
+  const [feePlanMonths, setFeePlanMonths] = useState<FeePlanMonth[]>([]);
+  const [selectedMonthIds, setSelectedMonthIds] = useState<string[]>([]);
   const [deletingId, setDeletingId] = useState("");
 
   const loadData = async () => {
@@ -85,18 +88,20 @@ export default function ManageFees() {
   useEffect(() => { void loadData(); }, []);
   useEffect(() => {
     const studentId = form.student_id;
-    if (!studentId) { setAdmissionFeePaid(null); setAdmissionFeeCheckError(""); return; }
+    if (!studentId) { setAdmissionFeePaid(null); setAdmissionFeeCheckError(""); setFeePlanMonths([]); return; }
     let active = true;
     setAdmissionFeePaid(null);
     setAdmissionFeeCheckError("");
+    setFeePlanMonths([]);
     fetch("/api/student-fee-plan?student_id=" + encodeURIComponent(studentId), { cache: "no-store" })
       .then(async response => { const result = await response.json(); if (!response.ok) throw new Error(result.error || "Unable to verify admission fee."); return result.data; })
       .then(plan => {
         if (!active) return;
+        setFeePlanMonths((plan?.items || []) as FeePlanMonth[]);
         const admissionFee = (plan?.items || []).find((item: { fee_category: string }) => item.fee_category === "Admission Fee");
         const paid = !admissionFee || Number(admissionFee.remaining_amount) <= 0.001;
         setAdmissionFeePaid(paid);
-        if (!paid) {
+        if (!paid && !editingId) {
           setForm(current => current.student_id === studentId && current.fee_category === "Monthly Fee"
             ? { ...current, fee_category: "Admission Fee", amount: String(admissionFee.remaining_amount), period: "" }
             : current);
@@ -140,12 +145,16 @@ export default function ManageFees() {
         const period = items.length === 1 ? items[0].period || "" : "Multiple installments";
         const details = "Plan installments: " + items.map(item => [item.period || item.description, currency(item.remaining_amount)].join(" ")).join("; ");
         setForm({ student_id: studentId, fee_category: categories.length === 1 ? categories[0] : "Other", amount: String(items.reduce((sum, item) => sum + item.remaining_amount, 0)), payment_date: todayInput, payment_method: "Cash", upi_reference_number: "", period, notes: details.slice(0, 490) });
-        setPlanItemId(""); setPlanItemIds(items.map(item => item.id));
+        setPlanItemId(""); setPlanItemIds(items.map(item => item.id)); setSelectedMonthIds(items.filter(item => item.fee_category === "Monthly Fee").map(item => item.id));
       } else {
         const item = (plan?.items || []).find((entry: { id: string }) => entry.id === singleItemId);
         if (!item || item.is_waived || item.remaining_amount <= 0) throw new Error("This fee plan item is already paid or waived.");
         setForm({ student_id: studentId, fee_category: item.fee_category, amount: String(item.remaining_amount), payment_date: todayInput, payment_method: "Cash", upi_reference_number: "", period: item.period || "", notes: "" });
-        setPlanItemId(item.id); setPlanItemIds([]);
+        if (item.fee_category === "Monthly Fee") {
+          setPlanItemId(""); setPlanItemIds([item.id]); setSelectedMonthIds([item.id]);
+        } else {
+          setPlanItemId(item.id); setPlanItemIds([]); setSelectedMonthIds([]);
+        }
       }
       setEditingId(""); setActiveTab("collect");
       setSearchParams(new URLSearchParams(), { replace: true });
@@ -166,6 +175,7 @@ export default function ManageFees() {
 
   const activeStudents = students.filter(student => student.is_active === 1);
   const selectedStudent = activeStudents.find(student => student.id === form.student_id);
+  const outstandingMonths = feePlanMonths.filter(item => item.fee_category === "Monthly Fee" && !item.is_waived && item.remaining_amount > 0.001);
   const matchingStudents = activeStudents.filter(student => !studentSearch.trim() || String(student.roll_no || "").toLowerCase().includes(studentSearch.trim().toLowerCase()));
   const filteredPayments = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -178,12 +188,22 @@ export default function ManageFees() {
   }, [payments, search, fromDate, toDate]);
 
   const updateField = (key: keyof FormState, value: string) => setForm(current => ({ ...current, [key]: value }));
+  const updateMonthSelection = (ids: string[]) => {
+    const selected = outstandingMonths.filter(item => ids.includes(item.id));
+    const amount = selected.reduce((sum, item) => sum + item.remaining_amount, 0);
+    const period = selected.length === 1 ? selected[0].period : selected.length ? "Multiple installments" : "";
+    const notes = selected.length ? ("Monthly fee for: " + selected.map(item => item.period).join(", ")).slice(0, 490) : "";
+    setSelectedMonthIds(ids); setPlanItemIds(ids); setPlanItemId("");
+    const nextAmount = selected.length ? (editingId && Number(form.amount) > 0 ? form.amount : String(amount)) : "";
+    setForm(current => ({ ...current, amount: nextAmount, period, notes }));
+  };
 
   const resetForm = () => {
     setForm(freshForm());
     setEditingId("");
     setPlanItemId("");
     setPlanItemIds([]);
+    setSelectedMonthIds([]);
     setStudentSearch("");
   };
 
@@ -191,6 +211,7 @@ export default function ManageFees() {
     setEditingId(payment.id);
     setPlanItemId(payment.fee_plan_item_id || "");
     setPlanItemIds([]);
+    setSelectedMonthIds([]);
     setForm({
       student_id: payment.student_id || "", fee_category: payment.fee_category,
       amount: String(payment.amount), payment_date: payment.payment_date,
@@ -222,6 +243,10 @@ export default function ManageFees() {
     const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
     const printAfterSave = !editingId && submitter?.value === "collect-print";
     const wasEditing = Boolean(editingId);
+    if (!wasEditing && form.fee_category === "Monthly Fee" && !planItemId && !planItemIds.length) {
+      toast({ title: "Select fee month(s)", description: "Choose one or more unpaid monthly installments so the payment is applied to the correct months.", variant: "destructive" });
+      return;
+    }
     setBusy(true);
     try {
       const url = "/api/fees" + (editingId ? "?id=" + encodeURIComponent(editingId) : "");
@@ -324,9 +349,9 @@ export default function ManageFees() {
                 <form onSubmit={submit} className="grid gap-5 sm:grid-cols-2">
                   <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="student-roll-search">Search by Roll Number</Label>
-                    <Input id="student-roll-search" type="search" disabled={Boolean(editingId)} placeholder="Enter student roll number" value={studentSearch} onChange={event => { setStudentSearch(event.target.value); updateField("student_id", ""); }} className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
+                    <Input id="student-roll-search" type="search" disabled={Boolean(editingId)} placeholder="Enter student roll number" value={studentSearch} onChange={event => { setStudentSearch(event.target.value); setSelectedMonthIds([]); setPlanItemIds([]); setPlanItemId(""); updateField("student_id", ""); }} className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
                     <Label htmlFor="fee-student">Student *</Label>
-                    <select id="fee-student" required disabled={Boolean(editingId)} value={form.student_id} onChange={event => updateField("student_id", event.target.value)} className="h-10 w-full rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white">
+                    <select id="fee-student" required disabled={Boolean(editingId)} value={form.student_id} onChange={event => { setSelectedMonthIds([]); setPlanItemIds([]); setPlanItemId(""); updateField("student_id", event.target.value); }} className="h-10 w-full rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white">
                       <option value="" className="text-slate-900">Select a student</option>
                       {matchingStudents.map(student => <option key={student.id} value={student.id} className="text-slate-900">{student.roll_no || "No roll number"} · {student.student_name}</option>)}
                     </select>
@@ -334,14 +359,14 @@ export default function ManageFees() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="fee-category">Fee Type *</Label>
-                    <select id="fee-category" required value={form.fee_category} onChange={event => updateField("fee_category", event.target.value)} className="h-10 w-full rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white">
+                    <select id="fee-category" required value={form.fee_category} onChange={event => { const category = event.target.value; updateField("fee_category", category); if (category !== "Monthly Fee") { setSelectedMonthIds([]); setPlanItemIds([]); setPlanItemId(""); setForm(current => ({ ...current, period: "", notes: "" })); } }} className="h-10 w-full rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white">
                       {categories.map(item => <option key={item} disabled={item === "Monthly Fee" && admissionFeePaid !== true} className="text-slate-900">{item}</option>)}
                     </select>
                     {form.student_id && admissionFeePaid !== true && <p role="status" className="text-xs text-amber-200">{admissionFeeCheckError || (admissionFeePaid === null ? "Checking admission fee…" : "Admission Fee must be fully paid before Monthly Fee can be collected.")}</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="fee-amount">Amount (₹) *</Label>
-                    <Input id="fee-amount" type="number" min="0.01" step="0.01" required value={form.amount} onChange={event => updateField("amount", event.target.value)} className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
+                    <Input id="fee-amount" type="number" min="0.01" step="0.01" required  value={form.amount} onChange={event => updateField("amount", event.target.value)} className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
                     {selectedStudent && <p className="text-xs text-gray-300">Recorded one-time fee: {selectedStudent.one_time_fee == null ? "—" : currency(selectedStudent.one_time_fee)} · Monthly fee: {selectedStudent.monthly_fee == null ? "—" : currency(selectedStudent.monthly_fee)}</p>}
                   </div>
                   <div className="space-y-2">
@@ -358,10 +383,20 @@ export default function ManageFees() {
                     <Label htmlFor="fee-upi-reference">UPI Reference Number *</Label>
                     <Input id="fee-upi-reference" required maxLength={120} value={form.upi_reference_number} onChange={event => updateField("upi_reference_number", event.target.value)} placeholder="Enter UPI transaction/reference number" className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
                   </div>}
-                  <div className="space-y-2">
+                  {form.fee_category === "Monthly Fee" ? <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="fee-months">Select Month(s) *</Label>
+                    <div id="fee-months" role="group" aria-label="Select monthly fee installments" className="max-h-64 space-y-1 overflow-y-auto rounded-md border border-white/30 bg-white/5 p-2">
+                      {outstandingMonths.map(item => <label key={item.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-white hover:bg-white/10">
+                        <input type="checkbox" checked={selectedMonthIds.includes(item.id)} disabled={admissionFeePaid !== true} onChange={event => updateMonthSelection(event.target.checked ? [...selectedMonthIds, item.id] : selectedMonthIds.filter(id => id !== item.id))} className="h-4 w-4 accent-emerald-500 disabled:opacity-50" />
+                        <span className="min-w-0 flex-1">{item.period} · {item.status}</span><span className="whitespace-nowrap text-gray-200">Balance {currency(item.remaining_amount)}</span>
+                      </label>)}
+                      {outstandingMonths.length === 0 && <p className="p-2 text-sm text-gray-300">{form.student_id ? "No unpaid monthly installments are available." : "Select a student first."}</p>}
+                    </div>
+                    <p className="text-xs text-gray-300">Select one month or several months. Their balances will be linked to this receipt; smaller amounts are allocated by due date.</p>
+                  </div> : <div className="space-y-2">
                     <Label htmlFor="fee-period">Month / Period</Label>
                     <Input id="fee-period" maxLength={40} placeholder="For example, November 2026" value={form.period} onChange={event => updateField("period", event.target.value)} className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
-                  </div>
+                  </div>}
                   <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="fee-notes">Notes</Label>
                     <Input id="fee-notes" maxLength={500} value={form.notes} onChange={event => updateField("notes", event.target.value)} className="border-white/30 bg-white/10 text-white" />
