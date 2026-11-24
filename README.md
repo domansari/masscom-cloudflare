@@ -87,6 +87,8 @@ Run `node --test tests/certificate-roles.test.mjs` with Node.js 24 to exercise t
 
 Before publishing the student register, apply [migration 0008](migrations/0008_students.sql) to the production D1 database bound as `DB` (and to any preview database). It creates a separate student register; existing certificates and mark sheets remain unchanged. The `/students` page and `/api/students` endpoints require an administrator session. Archiving keeps the student record and can be reversed from the archived records view.
 
+For the expanded enrollment form, apply [migration 0009](migrations/0009_student_enrollment_fields.sql) to the same D1 database before publishing the updated Pages code. It adds family, gender/category, session, fee, referral, and Aadhaar-last-four fields and backfills the first name from existing student names. Photo and certificate uploads are not enabled until a private R2 bucket and authenticated file endpoints are configured.
+
 ## Provision a confirmed verifier
 
 After confirming the recipient email and permissions, a Cloudflare administrator with D1 write access can run `node scripts/prepare-verifier.mjs <confirmed-email>` in a private terminal. The command generates a random password and an insert statement. It does not connect to D1. Use the insert in the production D1 console after deployment, verify that it inserted one row, and share the generated password privately with the intended recipient. Keep the generated password and statement out of source control and shared logs. An existing email is never updated by the statement.
