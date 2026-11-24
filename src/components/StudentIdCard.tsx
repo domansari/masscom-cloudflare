@@ -65,7 +65,7 @@ export default function StudentIdCard({ card, photoUrl }: { card: StudentIdCardR
   const [qrImage, setQrImage] = useState("");
   useEffect(() => {
     let active = true;
-    const target = window.location.origin + "/student-record?regNo=" + encodeURIComponent(card.registration_no);
+    const target = window.location.origin + "/student-card-view?regNo=" + encodeURIComponent(card.registration_no);
     QRCode.toDataURL(target, { width: 320, margin: 1, errorCorrectionLevel: "M" })
       .then(value => { if (active) setQrImage(value); })
       .catch(() => { if (active) setQrImage(""); });

@@ -17,6 +17,7 @@ import Header from "./components/Header";
 import MarkSheets from "./pages/MarkSheets";
 import ManageStudents from "./pages/ManageStudents";
 import StudentPreview from "./pages/StudentPreview";
+import StudentCardView from "./pages/StudentCardView";
 
 const queryClient = new QueryClient();
 
@@ -37,6 +38,7 @@ const App = () => (
               <Route path="/students" element={<ProtectedRoute><ManageStudents /></ProtectedRoute>} />
               <Route path="/students/:id/preview" element={<ProtectedRoute><StudentPreview /></ProtectedRoute>} />
               <Route path="/student-record" element={<ProtectedRoute><StudentPreview /></ProtectedRoute>} />
+              <Route path="/student-card-view" element={<StudentCardView />} />
               <Route 
                 path="/" 
                 element={
