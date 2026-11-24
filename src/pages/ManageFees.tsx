@@ -177,7 +177,7 @@ export default function ManageFees() {
 
   const activeStudents = students.filter(student => student.is_active === 1);
   const selectedStudent = activeStudents.find(student => student.id === form.student_id);
-  const outstandingMonths = feePlanMonths.filter(item => item.fee_category === "Monthly Fee" && item.status === "pending" && !item.is_waived && item.remaining_amount > 0.001);
+  const outstandingMonths = feePlanMonths.filter(item => item.fee_category === "Monthly Fee" && (item.status === "pending" || item.status === "upcoming") && !item.is_waived && item.remaining_amount > 0.001);
   const matchingStudents = activeStudents.filter(student => !studentSearch.trim() || String(student.roll_no || "").toLowerCase().includes(studentSearch.trim().toLowerCase()));
   const filteredPayments = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -398,9 +398,9 @@ export default function ManageFees() {
                         <input type="checkbox" checked={selectedMonthIds.includes(item.id)} disabled={admissionFeePaid !== true} onChange={event => updateMonthSelection(event.target.checked ? [...selectedMonthIds, item.id] : selectedMonthIds.filter(id => id !== item.id))} className="h-4 w-4 accent-emerald-500 disabled:opacity-50" />
                         <span className="min-w-0 flex-1">{item.period} · {item.status}</span><span className="whitespace-nowrap text-gray-200">Balance {currency(item.remaining_amount)}</span>
                       </label>)}
-                      {outstandingMonths.length === 0 && <p className="p-2 text-sm text-gray-300">{form.student_id ? "No monthly installments are due yet; upcoming months become available on their due date." : "Select a student first."}</p>}
+                      {outstandingMonths.length === 0 && <p className="p-2 text-sm text-gray-300">{form.student_id ? "No unpaid monthly installments are available for this student." : "Select a student first."}</p>}
                     </div>
-                    <p className="text-xs text-gray-300">Select one month or several months. Their balances will be linked to this receipt; smaller amounts are allocated by due date.</p>
+                    <p className="text-xs text-gray-300">Select due or upcoming months. Their balances will be linked to this receipt; smaller amounts are allocated by due date.</p>
                   </div> : <div className="space-y-2">
                     <Label htmlFor="fee-period">Month / Period</Label>
                     <Input id="fee-period" maxLength={40} placeholder="For example, November 2026" value={form.period} onChange={event => updateField("period", event.target.value)} className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
