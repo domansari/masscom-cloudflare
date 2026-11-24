@@ -333,7 +333,7 @@ const GenerateCertificate = () => {
                 <div>
                   <Label htmlFor="completionDate" className="text-white">Completion Date</Label>
                   <Input
-                    type="date"
+                    type="date" lang="en-IN"
                     id="completionDate"
                     value={formData.completionDate}
                     onChange={handleChange}

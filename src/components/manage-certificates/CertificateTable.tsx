@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { formatIndianDate } from '@/lib/date-format';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Edit, Trash2, ArrowUpDown, Printer, Eye } from 'lucide-react';
@@ -112,7 +113,7 @@ export const CertificateTable: React.FC<CertificateTableProps> = ({
                 {certificate.certificate_id}
               </TableCell>
               <TableCell className="text-gray-200">
-                {new Date(certificate.completion_date).toLocaleDateString()}
+                {formatIndianDate(certificate.completion_date)}
               </TableCell>
               <TableCell>
                 <div className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap">

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Award, BookOpen, UserRound } from "lucide-react";
+import { formatIndianDate, formatSessionYear } from "@/lib/date-format";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import CertificatePreview from "@/components/CertificatePreview";
 import { examCourses } from "../../functions/api/_exam-courses.js";
@@ -10,7 +11,7 @@ type Student = {
   id: string; student_name: string; first_name?: string | null; last_name?: string | null;
   father_name?: string | null; mother_name?: string | null; gender?: string | null; category?: string | null;
   roll_no?: string | null; batch_code?: string | null; section_batch?: string | null; course_name?: string | null;
-  institute_name?: string | null; session_year?: string | null; admission_date?: string | null; date_of_birth?: string | null;
+  session_year?: string | null; batch_timing?: string | null; admission_date?: string | null; date_of_birth?: string | null;
   phone?: string | null; email?: string | null; address?: string | null; aadhaar_last4?: string | null;
   notes?: string | null; one_time_fee?: number | null; monthly_fee?: number | null; is_active: number;
 };
@@ -46,7 +47,7 @@ export default function StudentCardView() {
     setRecord(null);
     setPhotoError(false);
     if (!registrationNo) {
-      setError("Registration number is missing.");
+      setError("Enrollment No. is missing.");
       setLoading(false);
       return () => controller.abort();
     }
@@ -68,12 +69,12 @@ export default function StudentCardView() {
   const { student, marksheets, certificates } = record;
   const displayFields: Array<[string, string | number | null | undefined]> = [
     ["Father’s Name", student.father_name], ["Mother’s Name", student.mother_name],
-    ["Registration No.", record.registration_no], ["Roll Number", student.roll_no],
+    ["Enrollment No.", record.registration_no], ["Roll Number", student.roll_no],
     ["Batch", student.section_batch || student.batch_code], ["Course", student.course_name],
-    ["Session", student.session_year], ["Date of Birth", student.date_of_birth],
-    ["Admission Date", student.admission_date], ["Phone", student.phone], ["Email", student.email],
+    ["Session", formatSessionYear(student.session_year)], ["Batch Timing", student.batch_timing], ["Date of Birth", formatIndianDate(student.date_of_birth)],
+    ["Admission Date", formatIndianDate(student.admission_date)], ["Phone", student.phone], ["Email", student.email],
     ["Gender / Category", [student.gender, student.category].filter(Boolean).join(" · ")],
-    ["Aadhaar (last 4)", student.aadhaar_last4], ["Institute", student.institute_name],
+    ["Aadhaar (last 4)", student.aadhaar_last4],
     ["Address", student.address], ["Notes", student.notes],
     ["One-time Fees", money(student.one_time_fee)], ["Monthly Fees", money(student.monthly_fee)],
   ];
@@ -112,7 +113,7 @@ function MarksheetRecord({ sheet }: { sheet: Sheet }) {
   const course = examCourses[sheet.exam_course];
   const modules = course?.modules || [];
   return <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
-    <CardHeader><CardTitle className="text-white">{sheet.exam_course ? course?.name || sheet.exam_course : "Marksheet"}</CardTitle><CardDescription className="text-gray-200">Registration No. {sheet.registration_no} · {sheet.issued_on ? "Issued " + sheet.issued_on : "Result in progress"}</CardDescription></CardHeader>
+    <CardHeader><CardTitle className="text-white">{sheet.exam_course ? course?.name || sheet.exam_course : "Marksheet"}</CardTitle><CardDescription className="text-gray-200">Enrollment No. {sheet.registration_no} · {sheet.issued_on ? "Issued " + formatIndianDate(sheet.issued_on) : "Result in progress"}</CardDescription></CardHeader>
     <CardContent>
       <div className="grid gap-2 sm:grid-cols-2">{modules.map(([key, label, subject]) => {
         const value = sheet[key as keyof Sheet];
@@ -169,7 +170,7 @@ function CertificateRecord({ certificate }: { certificate: Certificate }) {
   }, [certificate.id]);
 
   return <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
-    <CardHeader><CardTitle className="text-white">{certificate.course_name}</CardTitle><CardDescription className="text-gray-200">Certificate ID {certificate.certificate_id} · {certificate.completion_date}{certificate.grade ? " · " + certificate.grade : ""}</CardDescription></CardHeader>
+    <CardHeader><CardTitle className="text-white">{certificate.course_name}</CardTitle><CardDescription className="text-gray-200">Certificate ID {certificate.certificate_id} · {formatIndianDate(certificate.completion_date)}{certificate.grade ? " · " + certificate.grade : ""}</CardDescription></CardHeader>
     <CardContent className="space-y-4">
       <p className="text-center text-xs font-semibold tracking-wider text-rose-200">FOR ONLINE VERIFICATION ONLY</p>
       <div ref={previewBox} className="relative mx-auto h-[450px] w-full max-w-[317px] overflow-hidden rounded-md border border-slate-200 bg-white shadow-inner">

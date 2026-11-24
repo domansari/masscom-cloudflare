@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
+import { formatIndianDate } from "@/lib/date-format";
 
 export type StudentIdCardRecord = {
   id: string;
@@ -13,7 +14,6 @@ export type StudentIdCardRecord = {
   session_year: string | null;
   date_of_birth: string | null;
   phone: string | null;
-  institute_name: string | null;
 };
 
 const code39: Record<string, string> = {
@@ -93,22 +93,22 @@ export default function StudentIdCard({ card, photoUrl }: { card: StudentIdCardR
     </div>
     <div className="absolute inset-x-6 top-[54%] grid grid-cols-[1fr_88px] gap-2">
       <div className="space-y-1.5 text-[10px] leading-tight">
-        <div className="flex gap-1"><span className="w-[70px] shrink-0 font-bold text-slate-500">Enroll No.</span><span className="font-extrabold text-slate-900">{card.registration_no}</span></div>
+        <div className="flex gap-1"><span className="w-[70px] shrink-0 font-bold text-slate-500">Enrollment No.</span><span className="font-extrabold text-slate-900">{card.registration_no}</span></div>
         <div className="flex gap-1"><span className="w-[70px] shrink-0 font-bold text-slate-500">Father</span><span className="truncate font-semibold text-slate-800">{card.father_name || "—"}</span></div>
         <div className="flex gap-1"><span className="w-[70px] shrink-0 font-bold text-slate-500">Course</span><span className="font-semibold text-slate-800">{card.course_name || "—"}</span></div>
-        <div className="flex gap-1"><span className="w-[70px] shrink-0 font-bold text-slate-500">DOB</span><span className="font-semibold text-slate-800">{card.date_of_birth || "—"}</span></div>
+        <div className="flex gap-1"><span className="w-[70px] shrink-0 font-bold text-slate-500">DOB</span><span className="font-semibold text-slate-800">{formatIndianDate(card.date_of_birth)}</span></div>
         <div className="flex gap-1"><span className="w-[70px] shrink-0 font-bold text-slate-500">Mobile</span><span className="font-semibold text-slate-800">{card.phone || "—"}</span></div>
       </div>
       <div className="flex flex-col items-center">
         <div className="flex h-[82px] w-[82px] items-center justify-center rounded-lg border-2 border-emerald-100 bg-white p-1">
-          {qrImage ? <img src={qrImage} alt={"QR code for registration " + card.registration_no} className="h-full w-full" /> : null}
+          {qrImage ? <img src={qrImage} alt={"QR code for enrollment " + card.registration_no} className="h-full w-full" /> : null}
         </div>
         <span className="mt-1 text-[7px] font-bold text-slate-600">SCAN FOR STUDENT RECORD</span>
         <div className="mt-3 w-full text-center"><div className="border-t border-slate-400" /><span className="text-[7px] font-semibold text-slate-600">Director</span></div>
       </div>
     </div>
     <div className="absolute inset-x-8 top-[76%]">
-      <p className="mb-1 text-center text-[7px] font-bold uppercase tracking-[0.18em] text-emerald-800">Attendance Barcode · Registration No.</p>
+      <p className="mb-1 text-center text-[7px] font-bold uppercase tracking-[0.18em] text-emerald-800">Attendance Barcode · Enrollment No.</p>
       <Code39Barcode value={card.registration_no} />
     </div>
     <div className="absolute inset-x-0 bottom-0 flex min-h-[7%] items-center justify-center bg-emerald-800 px-3 py-1 text-center text-[7px] font-medium leading-tight text-white">

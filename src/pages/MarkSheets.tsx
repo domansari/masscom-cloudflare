@@ -14,13 +14,14 @@ import { createMarksheetPdf, downloadMarksheetBatch, type PrintableMarksheet } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
+import { formatIndianDate } from "@/lib/date-format";
 
 type Sheet = PrintableMarksheet & { id: string; certificate_ref: string | null };
 type Certificate = { id: string; certificate_id: string; student_name: string; roll_no?: string; batch_number?: string; course_name: string };
 type LinkedCertificate = Certificate & { father_name?: string | null; completion_date?: string };
 const sortColumns = [
   ["student_name", "Student Name"],
-  ["registration_no", "Registration No."],
+  ["registration_no", "Enrollment No."],
   ["issued_on", "Issue Date"],
   ["first_terminal", "1st Terminal"],
   ["second_terminal", "2nd Terminal"],
@@ -385,7 +386,7 @@ function MarkSheetWorkspace({ manage, certificateId, editLinked, sheetId, studen
           <label className="sm:col-span-2">Father’s Name
             <Input maxLength={150} value={form.father_name} onChange={event => setForm({ ...form, father_name: event.target.value })} />
           </label>
-          <p className="sm:col-span-2">Registration No. {form.roll_no || "Roll No."}/{form.batch_code || "Batch Code"}/{form.year || "Year"}</p>
+          <p className="sm:col-span-2">Enrollment No. {form.roll_no || "Roll No."}/{form.batch_code || "Batch Code"}/{form.year || "Year"}</p>
           {!editLinked && <label>Link to certificate
             <select className={`block w-full rounded-md border p-2 ${showSaved ? "bg-white" : "border-white/30 bg-white/20 text-white [&>option]:bg-slate-900"}`} value={form.certificate_ref} onChange={e => setForm({ ...form, certificate_ref: e.target.value })}>
               <option value="">No certificate linked</option>
@@ -406,7 +407,7 @@ function MarkSheetWorkspace({ manage, certificateId, editLinked, sheetId, studen
               <small>{modules}</small>
             </fieldset>
           ))}
-          <label>Date of issue<Input required={Boolean(preview)} disabled={!preview} type="date" value={preview ? form.issued_on : ""}
+          <label>Date of issue<Input required={Boolean(preview)} disabled={!preview} type="date" lang="en-IN" value={preview ? form.issued_on : ""}
             onChange={e => setForm({ ...form, issued_on: e.target.value })} /></label>
           {entriesReady && !preview && <p className="sm:col-span-2">Save now and enter the issue date after all marks are declared.</p>}
           {preview && <p className="sm:col-span-2">{preview.total}/{preview.maximum} · {preview.percentage}% · {preview.pass ? "Pass" : "Fail"} · Grade {preview.grade}</p>}
@@ -520,7 +521,7 @@ function MarkSheetWorkspace({ manage, certificateId, editLinked, sheetId, studen
             </div>
             <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" aria-hidden="true" />
-              <Input type="search" aria-label="Search saved mark sheets" placeholder="Search by student name or registration number..." value={search}
+              <Input type="search" aria-label="Search saved mark sheets" placeholder="Search by student name or Enrollment No..." value={search}
                 onChange={event => { setSearch(event.target.value); setPage(1); }}
                 className="border-white/30 bg-white/20 pl-10 text-white placeholder:text-gray-300" />
             </div>
@@ -560,7 +561,7 @@ function MarkSheetWorkspace({ manage, certificateId, editLinked, sheetId, studen
                     return <TableRow key={sheet.id} className="border-white/20 text-gray-200">
                       <TableCell className="font-medium text-white">{sheet.student_name}</TableCell>
                       <TableCell className="whitespace-nowrap font-mono text-xs">{sheet.registration_no}</TableCell>
-                      <TableCell className="whitespace-nowrap">{sheet.issued_on || "–"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatIndianDate(sheet.issued_on)}</TableCell>
                       <TableCell>{markLabel(sheet.first_terminal)}</TableCell>
                       <TableCell>{moduleCount >= 2 ? markLabel(sheet.second_terminal) : "–"}</TableCell>
                       <TableCell>{moduleCount >= 3 ? markLabel(sheet.third_terminal) : "–"}</TableCell>

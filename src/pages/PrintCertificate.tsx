@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import CertificatePreview from "@/components/CertificatePreview";
 import QRCodeGenerator from "@/components/QRCodeGenerator";
 import { createCertificatePDF } from "@/utils/pdfGenerator";
+import { formatIndianDate } from "@/lib/date-format";
 
 interface Certificate {
   id: string;
@@ -157,7 +158,7 @@ function CertificatePdf({ certificate }: { certificate: Certificate }) {
           <div className="space-y-2">
             <div><strong>Student:</strong> {certificate.student_name}</div>
             <div><strong>Course:</strong> {certificate.course_name}</div>
-            <div><strong>Completion Date:</strong> {new Date(certificate.completion_date).toLocaleDateString()}</div>
+            <div><strong>Completion Date:</strong> {formatIndianDate(certificate.completion_date)}</div>
             {certificate.roll_no && <div><strong>Roll No:</strong> {certificate.roll_no}</div>}
             {certificate.batch_number && <div><strong>Batch:</strong> {certificate.batch_number}</div>}
             <div><strong>Certificate ID:</strong> {certificate.certificate_id}</div>

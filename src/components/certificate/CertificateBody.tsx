@@ -1,5 +1,6 @@
 
 import { CertificateData } from "@/types/certificate";
+import { formatIndianDate } from "@/lib/date-format";
 
 interface CertificateBodyProps {
   data: CertificateData;
@@ -103,7 +104,7 @@ const CertificateBody = ({ data }: CertificateBodyProps) => {
       <div className="flex justify-center items-center gap-15 mb-3">
         <div className="text-center">
           <p className="text-x1 font-semibold text-black-700 mb-3">Duration:
-              {data.duration ? `${data.duration}` : "Duration"} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Grade:{data.grade || "Grade"} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date of Issue:{data.completionDate ? new Date(data.completionDate).toLocaleDateString() : "Date"}
+              {data.duration ? `${data.duration}` : "Duration"} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Grade:{data.grade || "Grade"} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date of Issue:{data.completionDate ? formatIndianDate(data.completionDate) : "Date"}
          </p>   
 
 

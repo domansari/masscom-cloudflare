@@ -9,17 +9,18 @@ export async function onRequest({ request, env }) {
   const url = new URL(request.url);
   if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
   const registrationNo = (url.searchParams.get("regNo") || "").trim();
-  if (!registrationNo || registrationNo.length > 64) return json({ error: "Invalid registration number" }, 400);
+  if (!registrationNo || registrationNo.length > 64) return json({ error: "Invalid Enrollment No." }, 400);
 
   try {
     const card = await env.DB.prepare(
       `SELECT c.student_id, c.registration_no, s.id, s.student_name, s.first_name, s.last_name,
         s.father_name, s.mother_name, s.gender, s.category, s.roll_no, s.batch_code, s.section_batch,
-        s.course_name, s.institute_name, s.session_year, s.admission_date, s.date_of_birth,
+        s.course_name, s.session_year, s.batch_timing, s.admission_date, s.date_of_birth,
         s.phone, s.email, s.address, s.aadhaar_last4, s.notes, s.one_time_fee, s.monthly_fee, s.is_active
        FROM student_id_cards c JOIN students s ON s.id = c.student_id
-       WHERE lower(trim(c.registration_no)) = lower(trim(?)) LIMIT 1`
-    ).bind(registrationNo).first();
+       WHERE lower(trim(c.registration_no)) = lower(trim(?)) OR lower(trim(s.roll_no)) = lower(trim(?))
+       ORDER BY CASE WHEN lower(trim(c.registration_no)) = lower(trim(?)) THEN 0 ELSE 1 END LIMIT 1`
+    ).bind(registrationNo, registrationNo, registrationNo).first();
 
     if (!card) return json({ error: "Student record not found" }, 404);
 
@@ -81,7 +82,7 @@ export async function onRequest({ request, env }) {
           id: card.id, student_name: card.student_name, first_name: card.first_name, last_name: card.last_name,
           father_name: card.father_name, mother_name: card.mother_name, gender: card.gender, category: card.category,
           roll_no: card.roll_no, batch_code: card.batch_code, section_batch: card.section_batch,
-          course_name: card.course_name, institute_name: card.institute_name, session_year: card.session_year,
+          course_name: card.course_name, session_year: card.session_year, batch_timing: card.batch_timing,
           admission_date: card.admission_date, date_of_birth: card.date_of_birth, phone: card.phone,
           email: card.email, address: card.address, aadhaar_last4: card.aadhaar_last4, notes: card.notes,
           one_time_fee: card.one_time_fee, monthly_fee: card.monthly_fee, is_active: card.is_active,

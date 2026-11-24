@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from "react";
+import { formatIndianDate } from "@/lib/date-format";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -233,7 +234,7 @@ const VerifyCertificate = () => {
                       <div>
                         <span className="font-medium text-green-800">Completion Date:</span>
                         <p className="text-green-700">
-                          {new Date(certificate.completion_date).toLocaleDateString()}
+                          {formatIndianDate(certificate.completion_date)}
                         </p>
                       </div>
                       <div>

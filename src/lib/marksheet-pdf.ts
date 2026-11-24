@@ -88,7 +88,7 @@ export function drawMarksheetPdf(sheet: PrintableMarksheet, logo: Uint8Array, wo
   pdf.text("Statement of Marks", 256, 83, { align: "center" });
 
   const details = [
-    ["Registration No.", sheet.registration_no],
+    ["Enrollment No.", sheet.registration_no],
     ["This Marksheet is awarded to", sheet.student_name],
     ["Father's Name", sheet.father_name || ""],
     ["Course", course.name],

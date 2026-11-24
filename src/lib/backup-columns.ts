@@ -19,8 +19,8 @@ export const backupColumns: Record<BackupType, Column[]> = {
   marksheets: [
     { key: "roll_no", label: "Roll No." },
     { key: "batch_code", label: "Batch Code" },
-    { key: "year", label: "Registration Year" },
-    { key: "registration_no", label: "Saved Registration No." },
+    { key: "year", label: "Session Year" },
+    { key: "registration_no", label: "Saved Enrollment No." },
     { key: "student_name", label: "Student Name", required: true },
     { key: "father_name", label: "Father’s Name" },
     { key: "exam_course", label: "Course Code", required: true },

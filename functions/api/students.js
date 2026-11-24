@@ -1,19 +1,20 @@
 import { confirmDeletePassword } from "./_delete-password.js";
 import { requireAdmin, sameOrigin } from "./_admin.js";
 import { certificateCourseOptions } from "./_exam-courses.js";
+import { batchTimings, buildEnrollmentNo, normalizeSessionYear } from "./_student-enrollment.js";
 
 const json = (data, status = 200) => Response.json(data, {
   status,
   headers: { "Cache-Control": "no-store" },
 });
 
-const fields = ["student_name", "father_name", "roll_no", "batch_code", "course_name", "admission_date", "date_of_birth", "phone", "email", "address", "notes", "first_name", "last_name", "mother_name", "gender", "category", "aadhaar_last4", "institute_name", "session_year", "section_batch"];
+const fields = ["student_name", "father_name", "roll_no", "batch_code", "course_name", "admission_date", "date_of_birth", "phone", "email", "address", "notes", "first_name", "last_name", "mother_name", "gender", "category", "aadhaar_last4", "session_year", "section_batch", "batch_timing"];
 const limits = {
   student_name: 150, father_name: 150, roll_no: 64, batch_code: 64,
   course_name: 150, admission_date: 10, date_of_birth: 10, phone: 32,
   email: 254, address: 1000, notes: 1000,
   first_name: 100, last_name: 100, mother_name: 150, gender: 16, category: 32,
-  aadhaar_last4: 4, institute_name: 180, session_year: 16, section_batch: 64,
+  aadhaar_last4: 4, session_year: 4, section_batch: 64, batch_timing: 32,
 };
 const feeFields = ["one_time_fee", "monthly_fee"];
 
@@ -44,6 +45,12 @@ function normalize(data, existingCourse = "") {
     }
   }
   if (student.aadhaar_last4 && !/^\d{4}$/.test(student.aadhaar_last4)) return null;
+  if (student.session_year) {
+    const year = normalizeSessionYear(student.session_year);
+    if (!year) return null;
+    student.session_year = year;
+  }
+  if (student.batch_timing && !batchTimings.includes(student.batch_timing)) return null;
   if (student.gender && !["Male", "Female", "Other"].includes(student.gender)) return null;
   const first = student.first_name || student.student_name;
   const fullName = [first, student.last_name].filter(Boolean).join(" ").trim();
@@ -99,19 +106,31 @@ export async function onRequest({ request, env }) {
     const writeFields = [...fields, ...feeFields];
     const values = writeFields.map(field => student[field]);
     const recordId = method === "POST" ? crypto.randomUUID() : id;
-    const result = method === "POST"
-      ? await env.DB.prepare(
+    let result;
+    if (method === "POST") {
+      result = await env.DB.prepare(
         `INSERT INTO students (${["id", ...writeFields, "is_active", "created_by"].join(", ")}) VALUES (${Array(writeFields.length + 3).fill("?").join(", ")})`
-      ).bind(recordId, ...values, isActive, account.adminId).run()
-      : await env.DB.prepare(
+      ).bind(recordId, ...values, isActive, account.adminId).run();
+    } else {
+      const existingCard = await env.DB.prepare("SELECT id FROM student_id_cards WHERE student_id = ? LIMIT 1").bind(id).first();
+      const enrollment = buildEnrollmentNo(student);
+      if (existingCard && !enrollment) return json({ error: "Keep Roll No., Section / Batch, and Session Year filled so the Enrollment No. stays valid." }, 400);
+      const updateStudent = env.DB.prepare(
         `UPDATE students SET ${writeFields.map(field => `${field} = ?`).join(", ")}, is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-      ).bind(...values, isActive, id).run();
+      ).bind(...values, isActive, id);
+      const statements = [updateStudent];
+      if (existingCard && enrollment) {
+        statements.push(env.DB.prepare("UPDATE student_id_cards SET registration_no = ?, updated_at = CURRENT_TIMESTAMP WHERE student_id = ?").bind(enrollment, id));
+      }
+      [result] = await env.DB.batch(statements);
+    }
     if (method === "PUT" && !result.meta.changes) return json({ error: "Student not found" }, 404);
     return json({ success: true, id: recordId }, method === "POST" ? 201 : 200);
   } catch (error) {
     if (error instanceof SyntaxError) return json({ error: "Invalid request" }, 400);
     const message = String(error?.message || "");
-    if (/no such column|has no column/i.test(message)) return json({ error: "Student enrollment database update is required. Apply migrations/0009_student_enrollment_fields.sql in D1, then try again." }, 503);
+    if (/no such column|has no column/i.test(message)) return json({ error: "Student database update is required. Apply the latest student migration in D1, then try again." }, 503);
+    if (/UNIQUE constraint failed/i.test(message)) return json({ error: "That Roll No. / Batch / Year is already assigned to another student." }, 409);
     return json({ error: "Unable to complete the student request" }, 500);
   }
 }

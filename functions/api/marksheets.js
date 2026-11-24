@@ -38,7 +38,7 @@ export async function onRequest({ request, env, allowLegacyRegistration = false 
     const raw = await request.text();
     if (raw.length > 4096) return json({ error: "Request too large" }, 413);
     const data = JSON.parse(raw);
-    const parts = [data?.roll_no, data?.batch_code, data?.year].map(value => typeof value === "string" ? value.trim() : "");
+    const parts = [data?.roll_no, data?.batch_code, data?.year].map(value => typeof value === "string" ? value.trim().toUpperCase() : "");
     const [roll, batch, year] = parts;
     const legacyRegistration = allowLegacyRegistration && typeof data?.registration_no === "string" ? data.registration_no.trim() : "";
     const registration = legacyRegistration || parts.join("/");
@@ -55,7 +55,7 @@ export async function onRequest({ request, env, allowLegacyRegistration = false 
         /[\x00-\x1f]/.test(registration) ||
         registration.length > 100 || !student || student.length > 150 || father.length > 150 ||
         !validMarksheetEntries(examCode, data)) {
-      return json({ error: "Enter the registration and student details. For each exam, enter marks or choose Not Declared." }, 400);
+      return json({ error: "Enter the Enrollment No. and student details. For each exam, enter marks or choose Not Declared." }, 400);
     }
     const modules = examCourses[examCode].modules;
     const undeclared = modules.reduce((flags, [field], index) => flags | (data[field] === null ? 1 << index : 0), 0);
@@ -74,7 +74,7 @@ export async function onRequest({ request, env, allowLegacyRegistration = false 
           normalize(certificate.batch_number) !== normalize(batch) ||
           normalize(certificate.student_name) !== normalize(student) ||
           examCourseCode(certificate.course_name) !== examCode) {
-        return json({ error: "Choose a certificate for the same course with the same roll number, batch code, and student name." }, 400);
+        return json({ error: "Choose a certificate for the same course with the same Roll No., Batch, and student name." }, 400);
       }
     }
     // The existing required mark columns retain their numeric constraints. The mask records pending marks separately from a real zero.
@@ -94,7 +94,7 @@ export async function onRequest({ request, env, allowLegacyRegistration = false 
     return result.meta.changes ? json({ success: true, id: sheetId }, method === "POST" ? 201 : 200) : json({ error: "Mark sheet not found" }, 404);
   } catch (error) {
     if (error instanceof SyntaxError) return json({ error: "Invalid request" }, 400);
-    if (String(error).includes("UNIQUE constraint failed")) return json({ error: "A mark sheet already exists for that registration number or certificate." }, 409);
+    if (String(error).includes("UNIQUE constraint failed")) return json({ error: "A mark sheet already exists for that Enrollment No. or certificate." }, 409);
     return json({ error: "Unable to complete the mark sheet request" }, 500);
   }
 }

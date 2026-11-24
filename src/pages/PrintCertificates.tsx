@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Search, ArrowUpDown, Download, ArrowLeft, Printer } from "lucide-react";
 import { Link } from "react-router-dom";
+import { formatIndianDate } from "@/lib/date-format";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -168,7 +169,7 @@ const PrintCertificates = () => {
             font-size: 14px;
             color: #333;
           ">
-            Date: ${new Date(certificate.completion_date).toLocaleDateString()}
+            Date: ${formatIndianDate(certificate.completion_date)}
           </div>
 
           <!-- Student Coordinator -->
@@ -635,7 +636,7 @@ const PrintCertificates = () => {
                           {certificate.certificate_id}
                         </TableCell>
                         <TableCell>
-                          {new Date(certificate.completion_date).toLocaleDateString()}
+                          {formatIndianDate(certificate.completion_date)}
                         </TableCell>
                         <TableCell>
                           <Link to={`/print/${certificate.id}`}>

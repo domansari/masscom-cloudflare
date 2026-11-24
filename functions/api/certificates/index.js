@@ -190,7 +190,7 @@ export async function onRequestPost({ request, env }) {
     return Response.json({ success: true, id }, { status: 201 });
   } catch (error) {
     if (String(error).includes("UNIQUE constraint failed")) {
-      return Response.json({ error: "This certificate ID or marksheet registration number already exists." }, { status: 409 });
+      return Response.json({ error: "This certificate ID or marksheet Enrollment No. already exists." }, { status: 409 });
     }
     return Response.json({ error: "Unable to create certificate" }, { status: 500 });
   }

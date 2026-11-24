@@ -63,7 +63,7 @@ export default function ExcelBackup({ type, onImported }: { type: BackupType; on
         ["Existing records are never overwritten. Rows with errors are reported separately."],
         ...(type === "marksheets" ? [
           ["Course codes: dca, cca, adca, cdtp, adtp."],
-          ["For new marksheets, fill roll number, batch code and year. Keep Saved Registration No. on restored backup rows."],
+          ["For new marksheets, fill roll number, batch code and year. Keep Saved Enrollment No. on restored backup rows."],
           ["Enter exam 1 only for cca or cdtp, exams 1–2 for dca, and exams 1–3 for adca or adtp."],
           ["For a pending exam enter Not Declared. Leave Issue Date blank until all marks are available."],
           ["To link a marksheet, enter the Certificate ID of an existing certificate."],
@@ -120,7 +120,7 @@ export default function ExcelBackup({ type, onImported }: { type: BackupType; on
           if (missing) throw new Error(`${missing.label} is required.`);
           if (type === "marksheets") {
             if ((!data.registration_no && (!data.roll_no || !data.batch_code || !/^\d{4}$/.test(String(data.year)))) || !validMarksheetEntries(data.exam_course, data)) {
-              throw new Error("Enter the registration details, a valid course code and marks or Not Declared for each required exam.");
+              throw new Error("Enter the Enrollment No. details, a valid course code and marks or Not Declared for each required exam.");
             }
             if (Boolean(data.issued_on) !== validExamMarks(data.exam_course, data)) {
               throw new Error("Enter an issue date only when all exam marks are declared.");

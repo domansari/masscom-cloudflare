@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { certificateCourseOptions } from "../../functions/api/_exam-courses.js";
+import { batchTimings, buildEnrollmentNo } from "../../functions/api/_student-enrollment.js";
+import { formatSessionYear } from "@/lib/date-format";
 import StudentPreview from "./StudentPreview";
 import StudentIdCard, { type StudentIdCardRecord } from "@/components/StudentIdCard";
 import html2canvas from "html2canvas";
@@ -18,7 +20,7 @@ type Student = {
   id: string; student_name: string; first_name: string | null; last_name: string | null;
   father_name: string | null; mother_name: string | null; gender: string | null; category: string | null;
   aadhaar_last4: string | null; roll_no: string | null; batch_code: string | null; section_batch: string | null;
-  course_name: string | null; institute_name: string | null; session_year: string | null;
+  course_name: string | null; session_year: string | null; batch_timing: string | null;
   admission_date: string | null; date_of_birth: string | null; phone: string | null; email: string | null;
   address: string | null; notes: string | null; one_time_fee: number | null; monthly_fee: number | null;
   is_active: number;
@@ -32,11 +34,11 @@ const emptyDocumentFiles = (): Record<DocumentType, File | null> => ({ photo: nu
 const today = new Date();
 const dateInput = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 const academicStartYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
-const currentSession = `${academicStartYear}-${String(academicStartYear + 1).slice(-2)}`;
+const currentSession = String(academicStartYear);
 const emptyForm: StudentForm = {
   student_name: "", first_name: "", last_name: "", father_name: "", mother_name: "", gender: "Male", category: "",
-  aadhaar_last4: "", roll_no: "", batch_code: "", section_batch: "", course_name: "", institute_name: "Masscom Infotech Education",
-  session_year: currentSession, admission_date: dateInput, date_of_birth: "", phone: "", email: "", address: "", notes: "",
+  aadhaar_last4: "", roll_no: "", batch_code: "", section_batch: "", course_name: "",
+  session_year: currentSession, batch_timing: "", admission_date: dateInput, date_of_birth: "", phone: "", email: "", address: "", notes: "",
   one_time_fee: null, monthly_fee: null,
 };
 
@@ -331,7 +333,7 @@ export default function ManageStudents() {
 
   const field = (name: keyof StudentForm, label: string, required = false, type = "text", hint?: string) => <div className="space-y-2" key={name}>
     <Label htmlFor={name} className="text-white">{label}{required ? " *" : ""}</Label>
-    <Input id={name} type={type} value={form[name] == null ? "" : String(form[name])} onChange={event => updateField(name, event.target.value)} required={required} className="border-white/30 bg-white/20 text-white placeholder:text-gray-300" />
+    <Input id={name} type={type} lang={type === "date" ? "en-IN" : undefined} inputMode={name === "session_year" ? "numeric" : undefined} maxLength={name === "session_year" ? 4 : undefined} value={form[name] == null ? "" : String(form[name])} onChange={event => updateField(name, name === "session_year" ? event.target.value.replace(/\D/g, "").slice(0, 4) : event.target.value)} required={required} className="border-white/30 bg-white/20 text-white placeholder:text-gray-300" />
     {hint && <p className="text-xs text-gray-200">{hint}</p>}
   </div>;
   const savedPhoto = editingId && documents.some(document => document.document_type === "photo")
@@ -377,14 +379,15 @@ export default function ManageStudents() {
       </Section>
 
       <Section title="Course / Class">
-        {field("institute_name", "Institute Name", false, "text", "Defaults to Masscom Infotech Education.")}
         <div className="space-y-2"><Label htmlFor="course_name" className="text-white">Course / Class *</Label><select id="course_name" required className="h-10 w-full rounded-md border border-white/30 bg-white/20 px-3 text-sm text-white" value={form.course_name || ""} onChange={event => updateField("course_name", event.target.value)}>
           <option value="" className="text-gray-900">Select certificate course</option>
           {editingId && form.course_name && !certificateCourseOptions.includes(form.course_name) && <option className="text-gray-900" value={form.course_name}>{form.course_name} (existing record)</option>}
           {certificateCourseOptions.map(course => <option className="text-gray-900" key={course} value={course}>{course}</option>)}
         </select></div>
-        {field("session_year", "Session Year")}{field("roll_no", "Roll Number", false, "text", "Leave blank if you will assign it later.")}
-        {field("section_batch", "Section / Batch")}{field("admission_date", "Admission Date", false, "date")}
+        {field("session_year", "Session Year (YYYY)", false, "text", "Enter a four-digit year, for example 2026.")}{field("roll_no", "Roll Number", false, "text", "Used in the Enrollment No.")}
+        {field("section_batch", "Section / Batch")}
+        <div className="space-y-2"><Label htmlFor="batch_timing" className="text-white">Batch Timing</Label><select id="batch_timing" className="h-10 w-full rounded-md border border-white/30 bg-white/20 px-3 text-sm text-white" value={form.batch_timing || ""} onChange={event => updateField("batch_timing", event.target.value)}><option value="" className="text-gray-900">Select batch timing</option>{batchTimings.map(timing => <option key={timing} value={timing} className="text-gray-900">{timing}</option>)}</select></div>
+        {field("admission_date", "Admission Date", false, "date")}
       </Section>
 
       <Section title="Fee" id="student-fees">
@@ -429,11 +432,11 @@ export default function ManageStudents() {
       <div className="relative mb-4 max-w-md"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" /><Input className="border-white/30 bg-white/20 pl-9 text-white placeholder:text-gray-300" placeholder="Search student records" value={search} onChange={event => setSearch(event.target.value)} /></div>
       {error && <p role="alert" className="mb-3 text-sm text-red-200">{error}</p>}
       {loading ? <p className="py-8 text-center text-gray-200">Loading student records…</p> : filtered.length === 0 ? <p className="py-8 text-center text-gray-200">No student records found.</p> :
-        <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm text-white"><thead><tr className="border-b border-white/20 text-gray-200"><th className="px-3 py-3">Student</th><th className="px-3 py-3">Roll / Batch</th><th className="px-3 py-3">Course / Session</th><th className="px-3 py-3">Phone / Email</th><th className="px-3 py-3">Status</th><th className="px-3 py-3 text-right">Actions</th></tr></thead>
+        <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm text-white"><thead><tr className="border-b border-white/20 text-gray-200"><th className="px-3 py-3">Student</th><th className="px-3 py-3">Enrollment No.</th><th className="px-3 py-3">Course / Session</th><th className="px-3 py-3">Phone / Email</th><th className="px-3 py-3">Status</th><th className="px-3 py-3 text-right">Actions</th></tr></thead>
           <tbody>{filtered.map(student => <tr key={student.id} className="border-b border-white/10 last:border-0">
             <td className="px-3 py-3 font-medium">{student.student_name}<div className="text-xs font-normal text-gray-300">Father: {display(student.father_name)}</div></td>
-            <td className="px-3 py-3">{display(student.roll_no)}<div className="text-xs text-gray-300">{display(student.section_batch || student.batch_code)}</div></td>
-            <td className="px-3 py-3">{display(student.course_name)}<div className="text-xs text-gray-300">{display(student.session_year)}</div></td>
+            <td className="px-3 py-3 font-mono text-xs">{buildEnrollmentNo(student) || "—"}</td>
+            <td className="px-3 py-3">{display(student.course_name)}<div className="text-xs text-gray-300">{formatSessionYear(student.session_year)}</div></td>
             <td className="px-3 py-3">{display(student.phone)}<div className="text-xs text-gray-300">{display(student.email)}</div></td>
             <td className="px-3 py-3"><span className={student.is_active ? "text-emerald-300" : "text-gray-300"}>{student.is_active ? "Active" : "Archived"}</span></td>
             <td className="px-3 py-3"><div className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap">
@@ -450,21 +453,21 @@ export default function ManageStudents() {
       {previewStudentId ? <StudentPreview studentId={previewStudentId} embedded /> : <Card aria-label="Student preview is empty" className="min-h-64 border-white/20 bg-white/10 backdrop-blur-lg"><CardContent className="min-h-64" /></Card>}
     </section>}
     {activeTab === "id-card" && <section role="tabpanel" id="id-card-panel" aria-labelledby="id-card-tab" className="space-y-6">
-      <Card className="border-white/20 bg-white/10 backdrop-blur-lg"><CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle className="text-white">ID Card Preview</CardTitle><CardDescription className="text-gray-200">Select an ID card below to preview it. Registration number is the card’s primary identifier.</CardDescription></div>
+      <Card className="border-white/20 bg-white/10 backdrop-blur-lg"><CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle className="text-white">ID Card Preview</CardTitle><CardDescription className="text-gray-200">Select an ID card below to preview it. Enrollment No. is the card’s primary identifier.</CardDescription></div>
         <div className="flex flex-wrap gap-2"><Button type="button" onClick={() => void printIdCard()} disabled={!printAllowed} className="bg-gradient-to-r from-emerald-600 to-green-700 text-white hover:from-emerald-700 hover:to-green-800">Print</Button><Button type="button" onClick={() => void downloadIdCard()} disabled={!printAllowed} className="bg-gradient-to-r from-blue-600 to-blue-800 text-white hover:from-blue-700 hover:to-blue-900">Download PDF</Button></div>
       </CardHeader><CardContent className="space-y-4">
         {idCardNotice && <p role="alert" className="text-sm text-red-200">{idCardNotice}</p>}
         <div ref={idCardPreviewRef} className="mx-auto w-full max-w-[360px]">{selectedIdCard ? <StudentIdCard card={selectedIdCard} photoUrl={"/api/students/files?student_id=" + encodeURIComponent(selectedIdCard.student_id) + "&type=photo&preview=1"} /> : <div className="flex aspect-[1.586] w-full items-center justify-center rounded-2xl border border-dashed border-white/30 bg-white/5 text-gray-300">Select an ID card to preview</div>}</div>
         {selectedIdCard && <div className="mx-auto flex max-w-[360px] flex-wrap items-center justify-between gap-3 rounded-lg border border-white/20 bg-white/5 p-3">
-          <div className="text-sm text-white"><span className="font-semibold">Registration No.:</span> {selectedIdCard.registration_no}<span className={selectedIdCard.student_active ? "ml-3 text-emerald-300" : "ml-3 text-amber-200"}>{selectedIdCard.student_active ? "Active" : "Archived"}</span></div>
-          <div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => { setIdCardRegistrationNo(selectedIdCard.registration_no); setIdCardEditing(value => !value); }}>{idCardEditing ? "Cancel edit" : "Edit"}</Button><Button type="button" size="sm" variant="destructive" onClick={() => { setCardToDelete(selectedIdCard); setCardDeletePassword(""); setCardDeleteError(""); }}>Delete</Button></div>
+          <div className="text-sm text-white"><span className="font-semibold">Enrollment No.:</span> {selectedIdCard.registration_no}<span className={selectedIdCard.student_active ? "ml-3 text-emerald-300" : "ml-3 text-amber-200"}>{selectedIdCard.student_active ? "Active" : "Archived"}</span></div>
+          <div className="flex gap-2"><Button type="button" size="sm" variant="destructive" onClick={() => { setCardToDelete(selectedIdCard); setCardDeletePassword(""); setCardDeleteError(""); }}>Delete</Button></div>
         </div>}
-        {idCardEditing && selectedIdCard && <form onSubmit={saveIdCardEdit} className="mx-auto flex max-w-[560px] flex-wrap items-end gap-3 rounded-lg border border-white/20 bg-white/5 p-3"><div className="min-w-48 flex-1 space-y-2"><Label htmlFor="id-card-registration-no" className="text-white">Registration No.</Label><Input id="id-card-registration-no" value={idCardRegistrationNo} onChange={event => setIdCardRegistrationNo(event.target.value)} required maxLength={64} className="border-white/30 bg-white/20 text-white" /></div><Button type="submit" disabled={idCardBusy}>{idCardBusy ? "Saving…" : "Save changes"}</Button></form>}
+        
       </CardContent></Card>
 
       <Card className="border-white/20 bg-white/10 backdrop-blur-lg"><CardHeader><CardTitle className="text-white">Manage ID Cards</CardTitle><CardDescription className="text-gray-200">Student archive status is reflected automatically on the linked ID card.</CardDescription></CardHeader><CardContent className="space-y-5">
-        <div className="flex flex-wrap items-end gap-3 rounded-lg border border-white/20 bg-white/5 p-3"><div className="min-w-56 flex-1 space-y-2"><Label htmlFor="id-card-student" className="text-white">Create ID card for an existing student</Label><select id="id-card-student" value={idCardStudentToCreate} onChange={event => setIdCardStudentToCreate(event.target.value)} className="h-10 w-full rounded-md border border-white/30 bg-white/20 px-3 text-sm text-white"><option value="" className="text-gray-900">Select student</option>{studentsWithoutCards.map(student => <option key={student.id} value={student.id} className="text-gray-900">{student.student_name} · {student.roll_no || "No registration no."}</option>)}</select></div><Button type="button" disabled={!idCardStudentToCreate || idCardBusy} onClick={() => void createIdCardForStudent()} className="bg-gradient-to-r from-indigo-600 to-violet-700 text-white hover:from-indigo-700 hover:to-violet-800"><CreditCard className="mr-2 h-4 w-4"/>{idCardBusy ? "Creating…" : "Create ID Card"}</Button></div>
-        {idCardLoading ? <p className="py-6 text-center text-gray-200">Loading ID cards…</p> : idCards.length === 0 ? <p className="py-6 text-center text-gray-200">No ID cards created yet.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm text-white"><thead><tr className="border-b border-white/20 text-gray-200"><th className="px-3 py-3">Student</th><th className="px-3 py-3">Registration No.</th><th className="px-3 py-3">Course</th><th className="px-3 py-3">Status</th><th className="px-3 py-3 text-right">Actions</th></tr></thead><tbody>{idCards.map(card => <tr key={card.id} onClick={() => selectIdCard(card)} aria-selected={selectedIdCardId === card.id} className={selectedIdCardId === card.id ? "cursor-pointer border-b border-white/10 bg-white/15" : "cursor-pointer border-b border-white/10 hover:bg-white/10"}><td className="px-3 py-3 font-medium">{card.student_name}<div className="text-xs text-gray-300">Father: {display(card.father_name)}</div></td><td className="px-3 py-3 font-semibold">{card.registration_no}</td><td className="px-3 py-3">{display(card.course_name)}</td><td className={card.student_active ? "px-3 py-3 text-emerald-300" : "px-3 py-3 text-amber-200"}>{card.student_active ? "Active" : "Archived"}</td><td className="px-3 py-3"><div className="inline-flex justify-end gap-1" onClick={event => event.stopPropagation()}><Button size="sm" aria-label="Edit ID card" title="Edit ID card" onClick={() => { selectIdCard(card); setIdCardEditing(true); }} className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-blue-500 to-blue-700 text-white shadow-lg transition-all duration-300 hover:scale-105 hover:from-blue-600 hover:to-blue-800"><Edit className="h-4 w-4"/></Button><Button size="sm" aria-label="Delete ID card" title="Delete ID card" onClick={() => { selectIdCard(card); setCardToDelete(card); setCardDeletePassword(""); setCardDeleteError(""); }} className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-red-500 to-red-700 text-white shadow-lg transition-all duration-300 hover:scale-105 hover:from-red-600 hover:to-red-800"><Trash2 className="h-4 w-4"/></Button></div></td></tr>)}</tbody></table></div>}
+        <div className="flex flex-wrap items-end gap-3 rounded-lg border border-white/20 bg-white/5 p-3"><div className="min-w-56 flex-1 space-y-2"><Label htmlFor="id-card-student" className="text-white">Create ID card for an existing student</Label><select id="id-card-student" value={idCardStudentToCreate} onChange={event => setIdCardStudentToCreate(event.target.value)} className="h-10 w-full rounded-md border border-white/30 bg-white/20 px-3 text-sm text-white"><option value="" className="text-gray-900">Select student</option>{studentsWithoutCards.map(student => <option key={student.id} value={student.id} className="text-gray-900">{student.student_name} · {buildEnrollmentNo(student) || "Enrollment No. not ready"}</option>)}</select></div><Button type="button" disabled={!idCardStudentToCreate || idCardBusy} onClick={() => void createIdCardForStudent()} className="bg-gradient-to-r from-indigo-600 to-violet-700 text-white hover:from-indigo-700 hover:to-violet-800"><CreditCard className="mr-2 h-4 w-4"/>{idCardBusy ? "Creating…" : "Create ID Card"}</Button></div>
+        {idCardLoading ? <p className="py-6 text-center text-gray-200">Loading ID cards…</p> : idCards.length === 0 ? <p className="py-6 text-center text-gray-200">No ID cards created yet.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm text-white"><thead><tr className="border-b border-white/20 text-gray-200"><th className="px-3 py-3">Student</th><th className="px-3 py-3">Enrollment No.</th><th className="px-3 py-3">Course</th><th className="px-3 py-3">Status</th><th className="px-3 py-3 text-right">Actions</th></tr></thead><tbody>{idCards.map(card => <tr key={card.id} onClick={() => selectIdCard(card)} aria-selected={selectedIdCardId === card.id} className={selectedIdCardId === card.id ? "cursor-pointer border-b border-white/10 bg-white/15" : "cursor-pointer border-b border-white/10 hover:bg-white/10"}><td className="px-3 py-3 font-medium">{card.student_name}<div className="text-xs text-gray-300">Father: {display(card.father_name)}</div></td><td className="px-3 py-3 font-semibold">{card.registration_no}</td><td className="px-3 py-3">{display(card.course_name)}</td><td className={card.student_active ? "px-3 py-3 text-emerald-300" : "px-3 py-3 text-amber-200"}>{card.student_active ? "Active" : "Archived"}</td><td className="px-3 py-3"><div className="inline-flex justify-end gap-1" onClick={event => event.stopPropagation()}><Button size="sm" aria-label="Edit ID card" title="Edit ID card" onClick={() => { selectIdCard(card); setIdCardEditing(true); }} className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-blue-500 to-blue-700 text-white shadow-lg transition-all duration-300 hover:scale-105 hover:from-blue-600 hover:to-blue-800"><Edit className="h-4 w-4"/></Button><Button size="sm" aria-label="Delete ID card" title="Delete ID card" onClick={() => { selectIdCard(card); setCardToDelete(card); setCardDeletePassword(""); setCardDeleteError(""); }} className="h-8 w-8 shrink-0 p-0 bg-gradient-to-r from-red-500 to-red-700 text-white shadow-lg transition-all duration-300 hover:scale-105 hover:from-red-600 hover:to-red-800"><Trash2 className="h-4 w-4"/></Button></div></td></tr>)}</tbody></table></div>}
       </CardContent></Card>
     </section>}
 

@@ -2,6 +2,7 @@ import type { PrintableMarksheet } from "@/lib/marksheet-pdf";
 import { examCourses, marksheetResult, passingMark } from "../../functions/api/_exam-courses.js";
 import logoUrl from "@/assets/marksheet-logo.png";
 import wordmarkUrl from "@/assets/marksheet-wordmark.png";
+import { formatIndianDate } from "@/lib/date-format";
 
 const durations: Record<string, string> = { dca: "8 Months", cca: "4 Months", cdtp: "4 Months" };
 
@@ -9,8 +10,7 @@ export default function MarksheetCanvasPreview({ sheet }: { sheet: PrintableMark
   const course = examCourses[sheet.exam_course];
   if (!course) return <p className="p-4 text-red-700">Unsupported marksheet course.</p>;
   const score = marksheetResult(sheet);
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(sheet.issued_on)
-    ? sheet.issued_on.split("-").reverse().join("/") : sheet.issued_on;
+  const date = formatIndianDate(sheet.issued_on);
 
   return (
     <div className="flex-1 min-h-0 overflow-auto bg-gray-100 p-2 sm:p-4">
@@ -31,7 +31,7 @@ export default function MarksheetCanvasPreview({ sheet }: { sheet: PrintableMark
           </header>
           <dl className="my-6 space-y-2 text-xs sm:text-sm">
             {([
-              ["Registration No.", sheet.registration_no],
+              ["Enrollment No.", sheet.registration_no],
               ["This Marksheet is awarded to", sheet.student_name],
               ["Father's Name", sheet.father_name || ""],
               ["Course", course.name],
