@@ -1,7 +1,6 @@
 import { confirmDeletePassword } from "./_delete-password.js";
 import { examCourseCode, examCourses, validMarksheetEntries } from "./_exam-courses.js";
 import { requireAdmin, requireCertificateUser, sameOrigin } from "./_admin.js";
-import { hasUnpaidDues } from "./_student-fee-plan.js";
 
 const json = (data, status = 200) => Response.json(data, {
   status, headers: { "Cache-Control": "no-store" }
@@ -79,14 +78,6 @@ export async function onRequest({ request, env, allowLegacyRegistration = false 
       }
     }
     // The existing required mark columns retain their numeric constraints. The mask records pending marks separately from a real zero.
-    if (!undeclared && date) {
-      const enrolledStudent = await env.DB.prepare(
-        "SELECT * FROM students WHERE lower(trim(roll_no)) = lower(trim(?)) AND lower(trim(COALESCE(section_batch, batch_code))) = lower(trim(?)) AND substr(session_year, 1, 4) = ? AND lower(trim(student_name)) = lower(trim(?)) LIMIT 1"
-      ).bind(roll, batch, year, student).first();
-      if (!enrolledStudent) return json({ error: "Add this student to Manage Students and complete the fee plan before issuing a final marksheet." }, 409);
-      const dues = await hasUnpaidDues(env, enrolledStudent);
-      if (dues.blocked) return json({ error: dues.reason, fee_plan: dues.plan }, 409);
-    }
     const first = data.first_terminal ?? 0;
     const second = modules.length >= 2 ? data.second_terminal ?? 0 : 0;
     const third = modules.length >= 3 ? data.third_terminal : null;
