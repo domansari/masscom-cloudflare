@@ -47,7 +47,7 @@ export async function onRequest({ request, env }) {
     }
 
     const studentBatch = card.section_batch || card.batch_code;
-    const [certResult, sheetResult, feePlan] = await Promise.all([
+    const [certResult, sheetResult, feePlan, otherDepositResult] = await Promise.all([
       env.DB.prepare(
         `SELECT id, certificate_id, student_name, father_name, course_name, duration, completion_date,
           grade, student_coordinator, roll_no, batch_number, instructor_name
@@ -65,6 +65,12 @@ export async function onRequest({ request, env }) {
          ORDER BY updated_at DESC, id`
       ).bind(card.student_name).all(),
       getStudentFeePlan(env, card),
+      env.DB.prepare(
+        `SELECT p.id, p.receipt_no, p.amount, p.payment_date, p.payment_method, p.notes
+         FROM fee_payments p WHERE p.student_id = ? AND p.fee_category = 'Other' AND p.fee_plan_item_id IS NULL
+           AND NOT EXISTS (SELECT 1 FROM student_fee_payment_allocations a WHERE a.payment_id = p.id)
+         ORDER BY p.payment_date DESC, p.created_at DESC`
+      ).bind(card.id).all(),
     ]);
 
     const certificates = (certResult.results || []).filter(item =>
@@ -94,6 +100,7 @@ export async function onRequest({ request, env }) {
         marksheets,
         certificates,
         fee_plan: feePlan,
+        other_deposits: otherDepositResult.results || [],
       },
     });
   } catch (error) {

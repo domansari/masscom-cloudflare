@@ -34,7 +34,8 @@ type FeePlan = {
     remaining_amount: number; is_waived: boolean; status: "paid" | "pending" | "upcoming" | "waived";
     receipts: Array<{ receipt_no: string; payment_date: string }> }>;
 };
-type RecordResponse = { data: { student: Student; registration_no: string; marksheets: Sheet[]; certificates: Certificate[]; fee_plan: FeePlan } };
+type OtherDeposit = { id: string; receipt_no: string; amount: number; payment_date: string; payment_method: string; notes?: string | null };
+type RecordResponse = { data: { student: Student; registration_no: string; marksheets: Sheet[]; certificates: Certificate[]; fee_plan: FeePlan; other_deposits: OtherDeposit[] } };
 
 const money = (value?: number | null) => value == null ? "Not set" : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
 const field = (label: string, value?: string | number | null) => <div key={label} className="rounded-md border border-white/15 bg-white/5 p-3"><p className="text-xs text-gray-300">{label}</p><p className="mt-1 break-words font-medium text-white">{value || "—"}</p></div>;
@@ -73,7 +74,7 @@ export default function StudentCardView() {
   if (loading) return <main className="min-h-screen bg-slate-900 p-8 text-white">Loading student record…</main>;
   if (error || !record) return <main className="min-h-screen bg-slate-900 p-8 text-white"><p role="alert">{error || "Student record not found."}</p></main>;
 
-  const { student, marksheets, certificates, fee_plan: feePlan } = record;
+  const { student, marksheets, certificates, fee_plan: feePlan, other_deposits: otherDeposits } = record;
   const displayFields: Array<[string, string | number | null | undefined]> = [
     ["Father’s Name", student.father_name], ["Mother’s Name", student.mother_name],
     ["Enrollment No.", record.registration_no], ["Roll Number", student.roll_no],
@@ -125,6 +126,16 @@ export default function StudentCardView() {
               <span className="inline-flex shrink-0 items-center gap-2 text-white"><span className={"h-2.5 w-2.5 rounded-full " + (item.status === "paid" ? "bg-emerald-400" : item.status === "pending" ? "bg-amber-300" : item.status === "upcoming" ? "bg-red-400" : "bg-gray-300")} />{item.status === "paid" ? "Paid" : item.status === "pending" ? "Pending" : item.status === "upcoming" ? "Upcoming" : "Waived"}</span>
             </div>) : <p className="text-sm text-gray-300">No fee plan items are available.</p>}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
+        <CardHeader><CardTitle className="text-white">Other Deposits</CardTitle><CardDescription className="text-gray-200">Additional charges and deposits, kept separate from the main fee plan.</CardDescription></CardHeader>
+        <CardContent className="space-y-2">
+          {otherDeposits.length ? otherDeposits.map(deposit => <div key={deposit.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/15 bg-white/5 p-3 text-sm">
+            <div><p className="font-semibold">{deposit.receipt_no}</p><p className="text-gray-300">{formatIndianDate(deposit.payment_date)} · {deposit.payment_method}</p>{deposit.notes && <p className="mt-1 text-xs text-gray-300">{deposit.notes}</p>}</div>
+            <p className="font-semibold text-emerald-300">{money(deposit.amount)}</p>
+          </div>) : <p className="text-sm text-gray-300">No other deposits recorded.</p>}
         </CardContent>
       </Card>
 

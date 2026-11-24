@@ -107,6 +107,8 @@ export default function ManageFees() {
             : current);
           setPlanItemId("");
           setPlanItemIds([]);
+        } else if (paid && !editingId && !(plan?.items || []).some((item: { fee_category: string; status: string; remaining_amount: number }) => item.fee_category === "Monthly Fee" && item.status === "pending" && item.remaining_amount > 0.001)) {
+          setForm(current => current.student_id === studentId && current.fee_category === "Monthly Fee" ? { ...current, fee_category: "Other" } : current);
         }
       })
       .catch(error => {
@@ -115,7 +117,7 @@ export default function ManageFees() {
         setAdmissionFeeCheckError(error instanceof Error ? error.message : "Unable to verify admission fee.");
       });
     return () => { active = false; };
-  }, [form.student_id]);
+  }, [form.student_id, editingId]);
 
   useEffect(() => {
     const receiptId = searchParams.get("receipt");
@@ -175,7 +177,7 @@ export default function ManageFees() {
 
   const activeStudents = students.filter(student => student.is_active === 1);
   const selectedStudent = activeStudents.find(student => student.id === form.student_id);
-  const outstandingMonths = feePlanMonths.filter(item => item.fee_category === "Monthly Fee" && !item.is_waived && item.remaining_amount > 0.001);
+  const outstandingMonths = feePlanMonths.filter(item => item.fee_category === "Monthly Fee" && item.status === "pending" && !item.is_waived && item.remaining_amount > 0.001);
   const matchingStudents = activeStudents.filter(student => !studentSearch.trim() || String(student.roll_no || "").toLowerCase().includes(studentSearch.trim().toLowerCase()));
   const filteredPayments = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -360,7 +362,12 @@ export default function ManageFees() {
                   <div className="space-y-2">
                     <Label htmlFor="fee-category">Fee Type *</Label>
                     <select id="fee-category" required value={form.fee_category} onChange={event => { const category = event.target.value; updateField("fee_category", category); if (category !== "Monthly Fee") { setSelectedMonthIds([]); setPlanItemIds([]); setPlanItemId(""); setForm(current => ({ ...current, period: "", notes: "" })); } }} className="h-10 w-full rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white">
-                      {categories.map(item => <option key={item} disabled={item === "Monthly Fee" && admissionFeePaid !== true} className="text-slate-900">{item}</option>)}
+                      {categories.map(item => {
+                        const dueItemExists = feePlanMonths.some(planItem => planItem.fee_category === item && planItem.status === "pending" && !planItem.is_waived && planItem.remaining_amount > 0.001);
+                        const disabled = item === "Monthly Fee" ? admissionFeePaid !== true || !outstandingMonths.length
+                          : ["Admission Fee", "Reexam Fee", "Certificate Issue Fee"].includes(item) && !dueItemExists;
+                        return <option key={item} value={item} disabled={disabled} className="text-slate-900">{item === "Other" ? "Other Deposit" : item}</option>;
+                      })}
                     </select>
                     {form.student_id && admissionFeePaid !== true && <p role="status" className="text-xs text-amber-200">{admissionFeeCheckError || (admissionFeePaid === null ? "Checking admission fee…" : "Admission Fee must be fully paid before Monthly Fee can be collected.")}</p>}
                   </div>
@@ -390,7 +397,7 @@ export default function ManageFees() {
                         <input type="checkbox" checked={selectedMonthIds.includes(item.id)} disabled={admissionFeePaid !== true} onChange={event => updateMonthSelection(event.target.checked ? [...selectedMonthIds, item.id] : selectedMonthIds.filter(id => id !== item.id))} className="h-4 w-4 accent-emerald-500 disabled:opacity-50" />
                         <span className="min-w-0 flex-1">{item.period} · {item.status}</span><span className="whitespace-nowrap text-gray-200">Balance {currency(item.remaining_amount)}</span>
                       </label>)}
-                      {outstandingMonths.length === 0 && <p className="p-2 text-sm text-gray-300">{form.student_id ? "No unpaid monthly installments are available." : "Select a student first."}</p>}
+                      {outstandingMonths.length === 0 && <p className="p-2 text-sm text-gray-300">{form.student_id ? "No monthly installments are due yet; upcoming months become available on their due date." : "Select a student first."}</p>}
                     </div>
                     <p className="text-xs text-gray-300">Select one month or several months. Their balances will be linked to this receipt; smaller amounts are allocated by due date.</p>
                   </div> : <div className="space-y-2">

@@ -30,7 +30,14 @@ export async function onRequest({ request, env }) {
       if (!student) return json({ error: "Student record not found" }, 404);
       await ensureStudentFeePlan(env, student);
       const plan = await getStudentFeePlan(env, student, { ensure: false });
-      return json({ data: plan });
+      const otherDeposits = await env.DB.prepare(
+        `SELECT p.id, p.receipt_no, p.amount, p.payment_date, p.payment_method, p.notes
+         FROM fee_payments p
+         WHERE p.student_id = ? AND p.fee_category = 'Other' AND p.fee_plan_item_id IS NULL
+           AND NOT EXISTS (SELECT 1 FROM student_fee_payment_allocations a WHERE a.payment_id = p.id)
+         ORDER BY p.payment_date DESC, p.created_at DESC`
+      ).bind(student.id).all();
+      return json({ data: plan, other_deposits: otherDeposits.results || [] });
     }
 
     const account = await requireAdmin(request, env);
@@ -38,15 +45,37 @@ export async function onRequest({ request, env }) {
     const raw = await request.text();
     if (raw.length > 2048) return json({ error: "Request too large" }, 413);
     const data = JSON.parse(raw);
-    if (data?.action !== "activate_reexam_fee") return json({ error: "Invalid fee plan action" }, 400);
+    if (!["activate_reexam_fee", "activate_certificate_issue_fee"].includes(data?.action)) return json({ error: "Invalid fee plan action" }, 400);
     const studentId = typeof data.student_id === "string" ? data.student_id.trim() : "";
+    if (!studentId || studentId.length > 128) return json({ error: "Select a student." }, 400);
     const amount = Number(data.amount);
-    if (!studentId || studentId.length > 128 || !Number.isFinite(amount) || amount <= 0 || amount > 100000000) {
-      return json({ error: "Select a student and enter a valid re-exam fee amount." }, 400);
+    if (data.action === "activate_reexam_fee" && (!Number.isFinite(amount) || amount <= 0 || amount > 100000000)) {
+      return json({ error: "Enter a valid re-exam fee amount." }, 400);
     }
     const student = await env.DB.prepare("SELECT * FROM students WHERE id = ? LIMIT 1").bind(studentId).first();
     if (!student) return json({ error: "Student not found." }, 404);
     await ensureStudentFeePlan(env, student);
+    if (data.action === "activate_certificate_issue_fee") {
+      const existingCertificateFee = await env.DB.prepare(
+        "SELECT * FROM student_fee_plan_items WHERE student_id = ? AND fee_category = 'Certificate Issue Fee' LIMIT 1"
+      ).bind(studentId).first();
+      if (existingCertificateFee && Number(existingCertificateFee.is_active) === 1) {
+        return json({ error: "Certificate issue fee is already activated for this student." }, 409);
+      }
+      if (existingCertificateFee) {
+        await env.DB.prepare(
+          "UPDATE student_fee_plan_items SET amount = 250, due_date = ?, is_active = 1, description = 'Certificate Issue Fee', created_by = ? WHERE id = ?"
+        ).bind(todayInIndia(), account.adminId, existingCertificateFee.id).run();
+      } else {
+        await env.DB.prepare(
+          `INSERT INTO student_fee_plan_items
+           (id, student_id, fee_category, amount, due_date, period, is_waived, is_active, description, created_by)
+           VALUES (?, ?, 'Certificate Issue Fee', 250, ?, '', 0, 1, 'Certificate Issue Fee', ?)`
+        ).bind(crypto.randomUUID(), studentId, todayInIndia(), account.adminId).run();
+      }
+      const plan = await getStudentFeePlan(env, student, { ensure: false });
+      return json({ success: true, data: plan }, 201);
+    }
     const existing = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM student_fee_plan_items WHERE student_id = ? AND fee_category = 'Reexam Fee' AND is_active = 1"
     ).bind(studentId).first();

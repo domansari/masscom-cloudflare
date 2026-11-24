@@ -32,6 +32,7 @@ type DocumentType = "photo";
 type StudentDocument = { document_type: DocumentType; file_name: string; content_type: string; file_size: number; created_at: string };
 type FeeReceipt = { id: string; receipt_no: string; amount: number; payment_date: string; period: string };
 type FeePlanItem = { id: string; fee_category: string; description: string; amount: number; paid_amount: number; remaining_amount: number; due_date: string; period: string; is_waived: boolean; status: "paid" | "pending" | "upcoming" | "waived"; receipts: FeeReceipt[] };
+type OtherDeposit = { id: string; receipt_no: string; amount: number; payment_date: string; payment_method: string; notes: string | null };
 type FeePlan = { student_id: string; student_name: string; roll_no: string | null; course_name: string | null; duration_months: number; configured: boolean; total_amount: number; paid_amount: number; pending_amount: number; upcoming_amount: number; outstanding_amount: number; items: FeePlanItem[] };
 const documentField = { type: "photo" as const, label: "Student Photo", accept: "image/jpeg,image/png,image/webp" };
 const emptyDocumentFiles = (): Record<DocumentType, File | null> => ({ photo: null });
@@ -117,6 +118,8 @@ export default function ManageStudents() {
   const [feePlanStudentId, setFeePlanStudentId] = useState("");
   const [selectedFeePlanItemIds, setSelectedFeePlanItemIds] = useState<string[]>([]);
   const [feePlan, setFeePlan] = useState<FeePlan | null>(null);
+  const [otherDeposits, setOtherDeposits] = useState<OtherDeposit[]>([]);
+  const [certificateFeeBusy, setCertificateFeeBusy] = useState(false);
   const [feePlanLoading, setFeePlanLoading] = useState(false);
   const [feePlanError, setFeePlanError] = useState("");
   const [reexamAmount, setReexamAmount] = useState("");
@@ -142,13 +145,13 @@ export default function ManageStudents() {
     if (focusFees) window.setTimeout(() => document.getElementById("student-fees")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
   }, [students, searchParams]);
   useEffect(() => {
-    if (activeTab !== "fee-plan" || !feePlanStudentId) { setFeePlan(null); return; }
+    if (activeTab !== "fee-plan" || !feePlanStudentId) { setFeePlan(null); setOtherDeposits([]); return; }
     let active = true;
     setFeePlanLoading(true);
     setFeePlanError("");
     fetch("/api/student-fee-plan?student_id=" + encodeURIComponent(feePlanStudentId), { cache: "no-store" })
       .then(async response => { const result = await response.json(); if (!response.ok) throw new Error(result.error || "Unable to load fee plan."); return result; })
-      .then(result => { if (active) setFeePlan(result.data || null); })
+      .then(result => { if (active) { setFeePlan(result.data || null); setOtherDeposits(result.other_deposits || []); } })
       .catch(cause => { if (active) setFeePlanError(cause instanceof Error ? cause.message : "Unable to load fee plan."); })
       .finally(() => { if (active) setFeePlanLoading(false); });
     return () => { active = false; };
@@ -187,11 +190,11 @@ export default function ManageStudents() {
   const updateField = (field: keyof StudentForm, value: string) => setForm(current => ({ ...current, [field]: value }));
   const matchingFeeStudents = students.filter(student => !feePlanSearch.trim() || String(student.roll_no || "").toLowerCase().includes(feePlanSearch.trim().toLowerCase()));
   const admissionFeeOutstanding = Number(feePlan?.items.find(item => item.fee_category === "Admission Fee")?.remaining_amount || 0);
-  const selectedPlanItems = feePlan?.items.filter(item => selectedFeePlanItemIds.includes(item.id) && !item.is_waived && item.remaining_amount > 0) || [];
-  const outstandingPlanItems = feePlan?.items.filter(item => !item.is_waived && item.remaining_amount > 0) || [];
+  const selectedPlanItems = feePlan?.items.filter(item => selectedFeePlanItemIds.includes(item.id) && !item.is_waived && item.remaining_amount > 0 && item.status === "pending") || [];
+  const outstandingPlanItems = feePlan?.items.filter(item => !item.is_waived && item.remaining_amount > 0 && item.status === "pending") || [];
   const planCollectionHref = (items: FeePlanItem[]) => "/fees?student_id=" + encodeURIComponent(feePlan?.student_id || "") + "&plan_item_ids=" + encodeURIComponent(items.map(item => item.id).join(","));
   useEffect(() => { setSelectedFeePlanItemIds([]); }, [feePlanStudentId]);
-  const estimatedPlanTotal = Number(form.one_time_fee || 0) + Number(form.monthly_fee || 0) * Math.max(0, Number(form.course_duration_months || 0) - (form.waive_last_two_months ? 2 : 0)) + 250;
+  const estimatedPlanTotal = Number(form.one_time_fee || 0) + Number(form.monthly_fee || 0) * Math.max(0, Number(form.course_duration_months || 0) - (form.waive_last_two_months ? 2 : 0));
   const activateReexamFee = async () => {
     if (!feePlanStudentId || reexamBusy) return;
     const amount = Number(reexamAmount);
@@ -205,6 +208,18 @@ export default function ManageStudents() {
       toast({ title: "Re-exam fee activated", description: "It is now included in this fee plan." });
     } catch (cause) { setFeePlanError(cause instanceof Error ? cause.message : "Could not activate re-exam fee."); }
     finally { setReexamBusy(false); }
+  };
+  const activateCertificateFee = async () => {
+    if (!feePlanStudentId || certificateFeeBusy) return;
+    setCertificateFeeBusy(true); setFeePlanError("");
+    try {
+      const response = await fetch("/api/student-fee-plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "activate_certificate_issue_fee", student_id: feePlanStudentId }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not activate certificate issue fee.");
+      setFeePlan(result.data);
+      toast({ title: "Certificate issue fee activated", description: "₹250 is now due and can be collected." });
+    } catch (cause) { setFeePlanError(cause instanceof Error ? cause.message : "Could not activate certificate issue fee."); }
+    finally { setCertificateFeeBusy(false); }
   };
   const loadDocuments = async (studentId: string) => {
     const result = await requestDocuments(studentId);
@@ -445,7 +460,7 @@ export default function ManageStudents() {
         {field("one_time_fee", "Admission Fee (₹)", false, "number", "Due on the admission date.")}
         {field("monthly_fee", "Monthly Fee (₹)", false, "number", "This amount is multiplied by the course duration.")}
         <div className="space-y-2"><Label className="flex items-center gap-2 text-white"><input type="checkbox" checked={Boolean(form.waive_last_two_months)} onChange={event => setForm(current => ({ ...current, waive_last_two_months: event.target.checked ? 1 : 0 }))} />Waive the final two monthly installments</Label><p className="text-xs text-gray-200">The waived months remain visible in the plan and are excluded from the total.</p></div>
-        <div className="rounded-md border border-white/20 bg-white/5 p-3 text-sm text-white"><strong>Estimated plan total:</strong> ₹{estimatedPlanTotal.toLocaleString("en-IN")} <span className="text-gray-300">(includes ₹250 certificate issue fee; re-exam fees are added only when activated)</span></div>
+        <div className="rounded-md border border-white/20 bg-white/5 p-3 text-sm text-white"><strong>Estimated plan total:</strong> ₹{estimatedPlanTotal.toLocaleString("en-IN")} <span className="text-gray-300">certificate fee and re-exam fee are added only when activated</span></div>
       </Section>
 
       <section className="space-y-4"><h3 className="border-b border-white/20 pb-2 text-lg font-semibold text-white">Student Photo</h3>
@@ -526,14 +541,23 @@ export default function ManageStudents() {
             <div className="space-y-1"><Label htmlFor="reexam-fee-amount" className="text-xs text-gray-200">Amount (₹)</Label><Input id="reexam-fee-amount" type="number" min="0.01" step="0.01" value={reexamAmount} onChange={event => setReexamAmount(event.target.value)} className="w-40 border-white/30 bg-white/20 text-white" /></div>
             <Button type="button" disabled={reexamBusy || !reexamAmount} onClick={() => void activateReexamFee()} className="bg-gradient-to-r from-blue-500 to-blue-700 text-white shadow-lg hover:from-blue-600 hover:to-blue-800">{reexamBusy ? "Activating…" : "Activate Re-exam Fee"}</Button>
           </div>
+          {!feePlan.items.some(item => item.fee_category === "Certificate Issue Fee") && <div className="flex flex-wrap items-center gap-3 rounded-lg border border-white/20 bg-white/5 p-4">
+            <div className="mr-auto"><h3 className="font-semibold text-white">Certificate Issue Fee</h3><p className="text-sm text-gray-300">Inactive by default. Activate the fixed ₹250 fee when it is required.</p></div>
+            <Button type="button" disabled={certificateFeeBusy} onClick={() => void activateCertificateFee()} className="bg-gradient-to-r from-blue-500 to-blue-700 text-white shadow-lg hover:from-blue-600 hover:to-blue-800">{certificateFeeBusy ? "Activating…" : "Activate ₹250 Fee"}</Button>
+          </div>}
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-white/15 bg-white/5 p-4">
-            <div className="mr-auto"><h3 className="font-semibold text-white">Advance / Full Fee Payment</h3><p className="text-sm text-gray-300">Select upcoming months to pay in advance, or pay the complete remaining plan in one receipt. Admission Fee must be paid before any Monthly Fee.</p></div>
+            <div className="mr-auto"><h3 className="font-semibold text-white">Due Fees Payment</h3><p className="text-sm text-gray-300">Select due monthly installments or pay all currently due plan fees in one receipt. Upcoming installments are available only on their due date. Admission Fee must be paid before any Monthly Fee.</p></div>
             <Button asChild disabled={!selectedPlanItems.length || admissionFeeOutstanding > 0.001} className="bg-gradient-to-r from-blue-500 to-blue-700 text-white hover:from-blue-600 hover:to-blue-800"><Link to={selectedPlanItems.length ? planCollectionHref(selectedPlanItems) : "#"}>Collect Selected ({feeMoney(selectedPlanItems.reduce((sum, item) => sum + item.remaining_amount, 0))})</Link></Button>
-            <Button asChild disabled={!outstandingPlanItems.length || (admissionFeeOutstanding > 0.001 && outstandingPlanItems.some(item => item.fee_category === "Monthly Fee"))} variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20"><Link to={outstandingPlanItems.length ? planCollectionHref(outstandingPlanItems) : "#"}>Pay Full Remaining Fee ({feeMoney(outstandingPlanItems.reduce((sum, item) => sum + item.remaining_amount, 0))})</Link></Button>
+            <Button asChild disabled={!outstandingPlanItems.length || (admissionFeeOutstanding > 0.001 && outstandingPlanItems.some(item => item.fee_category === "Monthly Fee"))} variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20"><Link to={outstandingPlanItems.length ? planCollectionHref(outstandingPlanItems) : "#"}>Pay All Due Fees ({feeMoney(outstandingPlanItems.reduce((sum, item) => sum + item.remaining_amount, 0))})</Link></Button>
           </div>
           <div className="overflow-x-auto rounded-lg border border-white/15"><table className="w-full min-w-[900px] text-left text-sm text-white"><thead><tr className="border-b border-white/20 text-gray-200"><th className="px-3 py-3">Fee</th><th className="px-3 py-3">Due Date</th><th className="px-3 py-3">Amount</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Receipts</th><th className="px-3 py-3">Action</th></tr></thead><tbody>
-            {feePlan.items.map(item => <tr key={item.id} className="border-b border-white/10 last:border-0"><td className="px-3 py-3 font-medium">{item.fee_category === "Monthly Fee" && !item.is_waived && item.remaining_amount > 0 && <input type="checkbox" aria-label={"Select " + item.description + (item.period ? " " + item.period : "") + " for combined payment"} checked={selectedFeePlanItemIds.includes(item.id)} disabled={admissionFeeOutstanding > 0.001} onChange={event => setSelectedFeePlanItemIds(current => event.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))} className="mr-2 align-middle accent-emerald-500" />}{item.description}{item.period && <div className="text-xs text-gray-300">{item.period}</div>}</td><td className="px-3 py-3 whitespace-nowrap">{formatIndianDate(item.due_date)}</td><td className="px-3 py-3">{feeMoney(item.amount)}{item.remaining_amount > 0 && item.remaining_amount < item.amount && <div className="text-xs text-gray-300">Balance {feeMoney(item.remaining_amount)}</div>}</td><td className="px-3 py-3"><span className="inline-flex items-center gap-2"><span className={"h-2.5 w-2.5 rounded-full " + (item.status === "paid" ? "bg-emerald-400" : item.status === "pending" ? "bg-amber-300" : item.status === "upcoming" ? "bg-red-400" : "bg-gray-300")} />{item.status === "paid" ? "Paid" : item.status === "pending" ? "Pending" : item.status === "upcoming" ? "Upcoming" : "Waived"}</span></td><td className="px-3 py-3">{item.receipts.length ? <div className="space-y-1">{item.receipts.map(receipt => <div key={receipt.id} className="whitespace-nowrap text-xs"><span className="font-medium">{receipt.receipt_no}</span> · {formatIndianDate(receipt.payment_date)} <Link className="ml-1 text-emerald-300 underline" to={"/fees?receipt=" + encodeURIComponent(receipt.id)}>Print</Link></div>)}</div> : "—"}</td><td className="px-3 py-3">{!item.is_waived && item.remaining_amount > 0 ? item.fee_category === "Monthly Fee" && admissionFeeOutstanding > 0.001 ? <span className="text-xs text-amber-200">Pay admission first</span> : <Button asChild size="sm" className="bg-gradient-to-r from-emerald-500 to-emerald-700 text-white hover:from-emerald-600 hover:to-emerald-800"><Link to={"/fees?student_id=" + encodeURIComponent(feePlan.student_id) + "&plan_item_id=" + encodeURIComponent(item.id)}>Collect</Link></Button> : "—"}</td></tr>)}
+            {feePlan.items.map(item => <tr key={item.id} className="border-b border-white/10 last:border-0"><td className="px-3 py-3 font-medium">{item.fee_category === "Monthly Fee" && item.status === "pending" && !item.is_waived && item.remaining_amount > 0 && <input type="checkbox" aria-label={"Select " + item.description + (item.period ? " " + item.period : "") + " for combined payment"} checked={selectedFeePlanItemIds.includes(item.id)} disabled={admissionFeeOutstanding > 0.001} onChange={event => setSelectedFeePlanItemIds(current => event.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))} className="mr-2 align-middle accent-emerald-500" />}{item.description}{item.period && <div className="text-xs text-gray-300">{item.period}</div>}</td><td className="px-3 py-3 whitespace-nowrap">{formatIndianDate(item.due_date)}</td><td className="px-3 py-3">{feeMoney(item.amount)}{item.remaining_amount > 0 && item.remaining_amount < item.amount && <div className="text-xs text-gray-300">Balance {feeMoney(item.remaining_amount)}</div>}</td><td className="px-3 py-3"><span className="inline-flex items-center gap-2"><span className={"h-2.5 w-2.5 rounded-full " + (item.status === "paid" ? "bg-emerald-400" : item.status === "pending" ? "bg-amber-300" : item.status === "upcoming" ? "bg-red-400" : "bg-gray-300")} />{item.status === "paid" ? "Paid" : item.status === "pending" ? "Pending" : item.status === "upcoming" ? "Upcoming" : "Waived"}</span></td><td className="px-3 py-3">{item.receipts.length ? <div className="space-y-1">{item.receipts.map(receipt => <div key={receipt.id} className="whitespace-nowrap text-xs"><span className="font-medium">{receipt.receipt_no}</span> · {formatIndianDate(receipt.payment_date)} <Link className="ml-1 text-emerald-300 underline" to={"/fees?receipt=" + encodeURIComponent(receipt.id)}>Print</Link></div>)}</div> : "—"}</td><td className="px-3 py-3">{!item.is_waived && item.remaining_amount > 0 && item.status === "pending" ? item.fee_category === "Monthly Fee" && admissionFeeOutstanding > 0.001 ? <span className="text-xs text-amber-200">Pay admission first</span> : <Button asChild size="sm" className="bg-gradient-to-r from-emerald-500 to-emerald-700 text-white hover:from-emerald-600 hover:to-emerald-800"><Link to={"/fees?student_id=" + encodeURIComponent(feePlan.student_id) + "&plan_item_id=" + encodeURIComponent(item.id)}>Collect</Link></Button> : item.status === "upcoming" ? <span className="text-xs text-gray-300">Available on due date</span> : "—"}</td></tr>)}
           </tbody></table></div>
+          <div className="rounded-lg border border-white/20 bg-white/5 p-4">
+            <h3 className="font-semibold text-white">Other Deposits</h3>
+            <p className="mb-3 text-xs text-gray-300">Separate charges and deposits are recorded here, outside the main fee plan.</p>
+            {otherDeposits.length ? <div className="space-y-2">{otherDeposits.map(deposit => <div key={deposit.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/10 bg-white/5 p-3 text-sm text-white"><div><span className="font-semibold">{deposit.receipt_no}</span><span className="ml-2 text-gray-300">· {formatIndianDate(deposit.payment_date)} · {deposit.payment_method}</span>{deposit.notes && <p className="text-xs text-gray-300">{deposit.notes}</p>}</div><span className="font-semibold">{feeMoney(deposit.amount)}</span></div>)}</div> : <p className="text-sm text-gray-300">No other deposits recorded.</p>}
+          </div>
         </>}
       </CardContent></Card>
     </section>}

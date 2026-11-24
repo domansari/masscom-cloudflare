@@ -147,6 +147,8 @@ export async function onRequestPost({ request, env }) {
       return Response.json({ error: "Add this student to Manage Students and complete the fee plan before issuing a certificate." }, { status: 409 });
     }
     const dues = await hasUnpaidDues(env, enrolledStudent, { includeCertificateFee: true });
+    const certificateFee = dues.plan.items.find(item => item.fee_category === "Certificate Issue Fee");
+    if (!certificateFee) return Response.json({ error: "Activate and pay the ₹250 Certificate Issue Fee before issuing the certificate." }, { status: 409 });
     if (dues.blocked) return Response.json({ error: dues.reason, fee_plan: dues.plan }, { status: 409 });
 
     const id = crypto.randomUUID();

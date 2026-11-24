@@ -1,7 +1,7 @@
 import { confirmDeletePassword } from "./_delete-password.js";
 import { requireAdmin, sameOrigin } from "./_admin.js";
 import { buildEnrollmentNo } from "./_student-enrollment.js";
-import { getStudentFeePlan } from "./_student-fee-plan.js";
+import { getStudentFeePlan, todayInIndia } from "./_student-fee-plan.js";
 
 const categories = ["Monthly Fee", "Admission Fee", "Reexam Fee", "Certificate Issue Fee", "Other"];
 const methods = ["Cash", "UPI"];
@@ -66,7 +66,7 @@ export async function onRequest({ request, env }) {
       ).bind(studentId).first();
       if (!student) return json({ error: "Student not found." }, 404);
       if (!student.is_active) return json({ error: "Restore this student before collecting a fee." }, 409);
-      const planItemId = typeof data.fee_plan_item_id === "string" ? data.fee_plan_item_id.trim() : "";
+      let planItemId = typeof data.fee_plan_item_id === "string" ? data.fee_plan_item_id.trim() : "";
       const allocationIds = Array.isArray(data.fee_plan_item_ids)
         ? [...new Set(data.fee_plan_item_ids.filter(value => typeof value === "string").map(value => value.trim()).filter(Boolean))]
         : [];
@@ -74,6 +74,22 @@ export async function onRequest({ request, env }) {
         return json({ error: "Select the unpaid month or months this Monthly Fee payment covers." }, 400);
       }
       if (allocationIds.length > 200 || (planItemId && allocationIds.length)) return json({ error: "Select a valid set of fee plan installments." }, 400);
+      if (!allocationIds.length && !planItemId && ["Admission Fee", "Reexam Fee", "Certificate Issue Fee"].includes(payment.fee_category)) {
+        const plan = await getStudentFeePlan(env, student);
+        const candidates = plan.items.filter(item => item.fee_category === payment.fee_category && !item.is_waived && item.remaining_amount > 0.001 && item.status === "pending");
+        if (!candidates.length) {
+          const message = payment.fee_category === "Certificate Issue Fee"
+            ? "Activate the ₹250 certificate issue fee before collecting it."
+            : payment.fee_category === "Reexam Fee"
+              ? "Activate a re-exam fee for this student before collecting it."
+              : "No admission fee is currently due for this student.";
+          return json({ error: message }, 409);
+        }
+        const candidate = candidates.sort((a, b) => a.due_date.localeCompare(b.due_date))[0];
+        if (payment.amount > candidate.remaining_amount + 0.001) return json({ error: "Payment exceeds the remaining balance for this fee." }, 400);
+        planItemId = candidate.id;
+        payment.period = candidate.period || "";
+      }
       let allocations = [];
       if (allocationIds.length) {
         const planItems = await Promise.all(allocationIds.map(itemId => env.DB.prepare(
@@ -85,16 +101,16 @@ export async function onRequest({ request, env }) {
             (itemCategories.length > 1 && payment.fee_category !== "Other")) {
           return json({ error: "Payment fee type must match the selected fee plan items." }, 409);
         }
-        allocations = await Promise.all(planItems.map(async item => {
-          const totals = await env.DB.prepare(
-            `SELECT
-              COALESCE((SELECT SUM(amount) FROM fee_payments WHERE fee_plan_item_id = ?), 0) +
-              COALESCE((SELECT SUM(a.amount) FROM student_fee_payment_allocations a JOIN fee_payments p ON p.id = a.payment_id WHERE a.fee_plan_item_id = ?), 0) AS paid`
-          ).bind(item.id, item.id).first();
-          const remaining = Math.max(0, Number(item.amount) - Number(totals?.paid || 0));
-          return { item, amount: remaining };
-        }));
-        allocations = allocations.filter(allocation => allocation.amount > 0.001);
+        const planSnapshot = await getStudentFeePlan(env, student);
+        const currentById = new Map(planSnapshot.items.map(item => [item.id, item]));
+        const selectedPlanItems = planItems.map(item => ({ item, current: currentById.get(item.id) }));
+        if (selectedPlanItems.some(entry => !entry.current || entry.current.remaining_amount <= 0.001)) {
+          return json({ error: "One or more selected fees have already been paid." }, 409);
+        }
+        if (selectedPlanItems.some(entry => entry.item.fee_category === "Monthly Fee" && entry.current.status !== "pending")) {
+          return json({ error: "Only monthly fees that are currently due can be collected." }, 409);
+        }
+        allocations = selectedPlanItems.map(({ item, current }) => ({ item, amount: current.remaining_amount }));
         const allocationTotal = allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
         if (!allocations.length || payment.amount > allocationTotal + 0.001) {
           return json({ error: "Payment amount cannot exceed the selected months' remaining balances." }, 400);
@@ -110,8 +126,13 @@ export async function onRequest({ request, env }) {
         if (!planItem || Number(planItem.is_waived) || planItem.fee_category !== payment.fee_category || (planItem.period || "") !== (payment.period || "")) {
           return json({ error: "That fee plan item is invalid, inactive, or does not match the payment." }, 409);
         }
-        const paid = await env.DB.prepare("SELECT COALESCE(SUM(amount), 0) AS amount FROM fee_payments WHERE fee_plan_item_id = ?").bind(planItemId).first();
-        if (Number(paid?.amount || 0) + payment.amount > Number(planItem.amount) + 0.001) {
+        const feePlan = await getStudentFeePlan(env, student);
+        const currentItem = feePlan.items.find(item => item.id === planItemId);
+        if (!currentItem || currentItem.remaining_amount <= 0.001) return json({ error: "This fee has already been paid." }, 409);
+        if (currentItem.fee_category === "Monthly Fee" && currentItem.status !== "pending") {
+          return json({ error: "Only monthly fees that are currently due can be collected." }, 409);
+        }
+        if (payment.amount > currentItem.remaining_amount + 0.001) {
           return json({ error: "Payment amount is greater than the remaining fee plan balance." }, 400);
         }
       }
@@ -172,15 +193,18 @@ export async function onRequest({ request, env }) {
           return json({ error: "Pay the full Admission Fee before collecting any Monthly Fee." }, 409);
         }
       }
-      const allocations = await Promise.all(planItems.map(async item => {
-        const totals = await env.DB.prepare(
-          `SELECT
-            COALESCE((SELECT SUM(amount) FROM fee_payments WHERE fee_plan_item_id = ? AND id <> ?), 0) +
-            COALESCE((SELECT SUM(a.amount) FROM student_fee_payment_allocations a JOIN fee_payments p ON p.id = a.payment_id WHERE a.fee_plan_item_id = ? AND p.id <> ?), 0) AS paid`
-        ).bind(item.id, id, item.id, id).first();
-        return { item, amount: Math.max(0, Number(item.amount) - Number(totals?.paid || 0)) };
-      }));
-      let payable = allocations.filter(allocation => allocation.amount > 0.001);
+      const student = await env.DB.prepare("SELECT * FROM students WHERE id = ? LIMIT 1").bind(linkedPayment.student_id).first();
+      if (!student) return json({ error: "Student not found." }, 404);
+      const planSnapshot = await getStudentFeePlan(env, student);
+      const currentById = new Map(planSnapshot.items.map(item => [item.id, item]));
+      const allocations = planItems.map(item => ({ item, current: currentById.get(item.id) }));
+      if (allocations.some(entry => !entry.current || entry.current.remaining_amount <= 0.001)) {
+        return json({ error: "One or more selected fees have already been paid." }, 409);
+      }
+      if (allocations.some(entry => entry.item.fee_category === "Monthly Fee" && entry.current.status !== "pending")) {
+        return json({ error: "Only monthly fees that are currently due can be collected." }, 409);
+      }
+      let payable = allocations.map(({ item, current }) => ({ item, amount: current.remaining_amount }));
       const total = payable.reduce((sum, allocation) => sum + allocation.amount, 0);
       if (!payable.length || payment.amount > total + 0.001) {
         return json({ error: "Receipt amount cannot exceed the selected months' remaining balances." }, 400);
@@ -226,8 +250,14 @@ export async function onRequest({ request, env }) {
       if (!planItem || Number(planItem.is_waived) || planItem.fee_category !== payment.fee_category || (planItem.period || "") !== (payment.period || "")) {
         return json({ error: "Keep the receipt aligned with its fee plan item." }, 409);
       }
-      const otherPaid = await env.DB.prepare("SELECT COALESCE(SUM(amount), 0) AS amount FROM fee_payments WHERE fee_plan_item_id = ? AND id <> ?").bind(planItem.id, id).first();
-      if (Number(otherPaid?.amount || 0) + payment.amount > Number(planItem.amount) + 0.001) {
+      if (planItem.fee_category === "Monthly Fee" && planItem.due_date > todayInIndia()) {
+        return json({ error: "Only monthly fees that are currently due can be collected." }, 409);
+      }
+      const [otherPaid, otherAllocated] = await Promise.all([
+        env.DB.prepare("SELECT COALESCE(SUM(amount), 0) AS amount FROM fee_payments WHERE fee_plan_item_id = ? AND id <> ?").bind(planItem.id, id).first(),
+        env.DB.prepare("SELECT COALESCE(SUM(a.amount), 0) AS amount FROM student_fee_payment_allocations a JOIN fee_payments p ON p.id = a.payment_id WHERE a.fee_plan_item_id = ? AND p.id <> ?").bind(planItem.id, id).first(),
+      ]);
+      if (Number(otherPaid?.amount || 0) + Number(otherAllocated?.amount || 0) + payment.amount > Number(planItem.amount) + 0.001) {
         return json({ error: "Payment amount is greater than the remaining fee plan balance." }, 400);
       }
     }

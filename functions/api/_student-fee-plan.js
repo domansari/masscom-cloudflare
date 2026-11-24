@@ -12,14 +12,6 @@ export function courseDurationMonths(courseName) {
   return COURSE_DURATIONS.get(String(courseName || "").trim().toLowerCase()) || null;
 }
 
-function addMonthsClamped(isoDate, months) {
-  const [year, month, day] = isoDate.split("-").map(Number);
-  const target = new Date(Date.UTC(year, month - 1 + months, 1));
-  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
-  target.setUTCDate(Math.min(day, lastDay));
-  return target.toISOString().slice(0, 10);
-}
-
 function firstOfNextMonth(isoDate, offset = 0) {
   const [year, month] = isoDate.split("-").map(Number);
   return new Date(Date.UTC(year, month + offset, 1)).toISOString().slice(0, 10);
@@ -64,8 +56,6 @@ export function buildBaseFeePlan(student) {
       items.push(makeItem(student.id, "Monthly Fee", monthlyFee, dueDate, periodForDate(dueDate), waived, "Monthly Fee"));
     }
   }
-  const courseEnd = addMonthsClamped(admissionDate, duration);
-  items.push(makeItem(student.id, "Certificate Issue Fee", 250, courseEnd, "", false, "Certificate Issue Fee"));
   return items;
 }
 
@@ -153,7 +143,7 @@ export async function getStudentFeePlan(env, student, { ensure = true } = {}) {
   const monthlyFee = Number(student.monthly_fee);
   const monthlyItems = items.filter(item => item.fee_category === "Monthly Fee");
   const configured = duration > 0 && Number.isFinite(monthlyFee) && monthlyFee > 0 &&
-    monthlyItems.length === duration && items.some(item => item.fee_category === "Certificate Issue Fee");
+    monthlyItems.length === duration;
   return {
     student_id: student.id, student_name: student.student_name, roll_no: student.roll_no,
     course_name: student.course_name, duration_months: duration, configured,
