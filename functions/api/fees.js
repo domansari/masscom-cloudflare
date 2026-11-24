@@ -2,7 +2,7 @@ import { confirmDeletePassword } from "./_delete-password.js";
 import { requireAdmin, sameOrigin } from "./_admin.js";
 import { buildEnrollmentNo } from "./_student-enrollment.js";
 
-const categories = ["Monthly Fee", "Admission Fee", "Reexam Fee", "Certificate Fee", "Issue Fee", "Other"];
+const categories = ["Monthly Fee", "Admission Fee", "Reexam Fee", "Certificate Issue Fee", "Other"];
 const methods = ["Cash", "UPI"];
 const json = (data, status = 200) => Response.json(data, {
   status,
