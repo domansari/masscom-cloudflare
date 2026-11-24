@@ -1,10 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Award, BookOpen, UserRound } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import CertificatePreview from "@/components/CertificatePreview";
-import { createCertificatePDF } from "@/utils/pdfGenerator";
-import { createMarksheetPdf, type PrintableMarksheet } from "@/lib/marksheet-pdf";
 import { examCourses } from "../../functions/api/_exam-courses.js";
 import type { CertificateData } from "@/types/certificate";
 
@@ -22,30 +20,16 @@ type Certificate = {
   student_coordinator?: string | null; roll_no?: string | null; batch_number?: string | null;
   instructor_name?: string | null;
 };
-type Sheet = PrintableMarksheet & {
-  id: string; certificate_ref?: string | null; exam_course: keyof typeof examCourses;
+type Sheet = {
+  id: string; registration_no: string; student_name: string; father_name: string | null;
+  issued_on: string; first_terminal: number | null; second_terminal: number | null;
+  third_terminal: number | null; exam_course: keyof typeof examCourses;
+  certificate_ref?: string | null;
 };
 type RecordResponse = { data: { student: Student; registration_no: string; marksheets: Sheet[]; certificates: Certificate[] } };
 
 const money = (value?: number | null) => value == null ? "Not set" : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
 const field = (label: string, value?: string | number | null) => <div key={label} className="rounded-md border border-white/15 bg-white/5 p-3"><p className="text-xs text-gray-300">{label}</p><p className="mt-1 break-words font-medium text-white">{value || "—"}</p></div>;
-
-function addVerificationWatermark(pdf: Awaited<ReturnType<typeof createMarksheetPdf>>) {
-  const pages = pdf.getNumberOfPages();
-  for (let page = 1; page <= pages; page++) {
-    pdf.setPage(page);
-    const width = pdf.internal.pageSize.getWidth();
-    const height = pdf.internal.pageSize.getHeight();
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(27);
-    pdf.setTextColor(210, 125, 125);
-    pdf.text("FOR ONLINE VERIFICATION ONLY", width / 2, height / 2, {
-      align: "center",
-      angle: -32,
-    });
-  }
-  return pdf;
-}
 
 export default function StudentCardView() {
   const [searchParams] = useSearchParams();
@@ -125,51 +109,21 @@ export default function StudentCardView() {
 }
 
 function MarksheetRecord({ sheet }: { sheet: Sheet }) {
-  const [preview, setPreview] = useState("");
-  const [notice, setNotice] = useState("");
   const course = examCourses[sheet.exam_course];
   const modules = course?.modules || [];
-
-  useEffect(() => {
-    let active = true;
-    let objectUrl = "";
-    async function prepare() {
-      try {
-        if (!course) throw new Error("Unknown marksheet course.");
-        const pdf = addVerificationWatermark(await createMarksheetPdf(sheet));
-        objectUrl = URL.createObjectURL(pdf.output("blob"));
-        if (active) setPreview(objectUrl);
-        else URL.revokeObjectURL(objectUrl);
-      } catch {
-        if (active) setNotice("Unable to prepare this marksheet preview.");
-      }
-    }
-    void prepare();
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [sheet, course]);
-
   return <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
     <CardHeader><CardTitle className="text-white">{sheet.exam_course ? course?.name || sheet.exam_course : "Marksheet"}</CardTitle><CardDescription className="text-gray-200">Registration No. {sheet.registration_no} · {sheet.issued_on ? "Issued " + sheet.issued_on : "Result in progress"}</CardDescription></CardHeader>
-    <CardContent className="space-y-4">
+    <CardContent>
       <div className="grid gap-2 sm:grid-cols-2">{modules.map(([key, label, subject]) => {
         const value = sheet[key as keyof Sheet];
         return <div key={key} className="rounded-md border border-white/15 bg-white/5 p-3"><p className="text-xs text-gray-300">{label} · {subject}</p><p className="mt-1 font-semibold">{value == null ? "Result awaited" : value + " / 100"}</p></div>;
       })}</div>
-      <p className="text-center text-xs font-semibold tracking-wider text-rose-200">FOR ONLINE VERIFICATION ONLY</p>
-      {notice ? <p role="alert" className="text-sm text-amber-100">{notice}</p> : preview
-        ? <iframe src={preview + "#toolbar=0&navpanes=0&scrollbar=0"} title={"Online verification marksheet " + sheet.registration_no} className="h-[75vh] min-h-96 w-full rounded-md border bg-slate-100" />
-        : <p role="status" className="text-center text-sm text-gray-200">Preparing marksheet…</p>}
     </CardContent>
   </Card>;
 }
 
 function CertificateRecord({ certificate }: { certificate: Certificate }) {
-  const source = useRef<HTMLDivElement>(null);
-  const [preview, setPreview] = useState("");
-  const [notice, setNotice] = useState("");
+  const previewBox = useRef<HTMLDivElement>(null);
   const data: CertificateData = {
     studentName: certificate.student_name, fatherName: certificate.father_name || "",
     courseName: certificate.course_name, duration: certificate.duration || "",
@@ -178,35 +132,49 @@ function CertificateRecord({ certificate }: { certificate: Certificate }) {
     rollNo: certificate.roll_no || "",
   };
 
-  useEffect(() => {
-    let active = true;
-    let objectUrl = "";
-    async function prepare() {
-      try {
-        if (!source.current) throw new Error("Certificate preview is not ready.");
-        const pdf = addVerificationWatermark(await createCertificatePDF(source.current));
-        objectUrl = URL.createObjectURL(pdf.output("blob"));
-        if (active) setPreview(objectUrl);
-        else URL.revokeObjectURL(objectUrl);
-      } catch {
-        if (active) setNotice("Unable to prepare this certificate preview.");
-      }
+  useLayoutEffect(() => {
+    const box = previewBox.current;
+    if (!box) return;
+    const certificateElement = box.querySelector<HTMLElement>("#certificate-container");
+    const certificateBody = box.querySelector<HTMLElement>("#certificate-element");
+    const hiddenControls = box.querySelector<HTMLElement>(".no-print");
+    if (hiddenControls) hiddenControls.style.display = "none";
+    if (certificateBody && !certificateBody.querySelector("[data-verification-watermark]")) {
+      const watermark = document.createElement("div");
+      watermark.dataset.verificationWatermark = "true";
+      Object.assign(watermark.style, {
+        position: "absolute", inset: "0", zIndex: "50", pointerEvents: "none",
+        display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+      });
+      const label = document.createElement("span");
+      label.textContent = "FOR ONLINE VERIFICATION ONLY";
+      Object.assign(label.style, {
+        transform: "rotate(-32deg)", color: "rgba(176, 52, 52, 0.34)",
+        fontFamily: "Arial, sans-serif", fontSize: "44px", fontWeight: "900",
+        letterSpacing: "0.08em", textAlign: "center", whiteSpace: "nowrap",
+      });
+      watermark.appendChild(label);
+      certificateBody.appendChild(watermark);
     }
-    void prepare();
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    const resize = () => {
+      if (!certificateElement) return;
+      const scale = Math.min(0.4, Math.max(0.2, (box.clientWidth - 2) / 794));
+      certificateElement.style.transform = `scale(${scale})`;
+      box.style.height = `${Math.ceil(1123 * scale)}px`;
     };
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(box);
+    return () => observer.disconnect();
   }, [certificate.id]);
 
   return <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
     <CardHeader><CardTitle className="text-white">{certificate.course_name}</CardTitle><CardDescription className="text-gray-200">Certificate ID {certificate.certificate_id} · {certificate.completion_date}{certificate.grade ? " · " + certificate.grade : ""}</CardDescription></CardHeader>
     <CardContent className="space-y-4">
       <p className="text-center text-xs font-semibold tracking-wider text-rose-200">FOR ONLINE VERIFICATION ONLY</p>
-      {notice ? <p role="alert" className="text-sm text-amber-100">{notice}</p> : preview
-        ? <iframe src={preview + "#toolbar=0&navpanes=0&scrollbar=0"} title={"Online verification certificate " + certificate.certificate_id} className="h-[75vh] min-h-96 w-full rounded-md border bg-slate-100" />
-        : <p role="status" className="text-center text-sm text-gray-200">Preparing certificate…</p>}
-      <div ref={source} aria-hidden="true" className="fixed left-[-10000px] top-0"><CertificatePreview data={data} /></div>
+      <div ref={previewBox} className="relative mx-auto h-[450px] w-full max-w-[317px] overflow-hidden rounded-md border border-slate-200 bg-white shadow-inner">
+        <CertificatePreview data={data} />
+      </div>
     </CardContent>
   </Card>;
 }
