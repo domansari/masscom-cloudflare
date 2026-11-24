@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { AlertCircle, CalendarClock, Clock, Database, FileText, IndianRupee, MessageCircle, RefreshCw, Shield, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -147,6 +147,10 @@ const clockFormat = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
 });
 
+const dateFormat = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata", weekday: "long", day: "2-digit", month: "long", year: "numeric",
+});
+
 function DashboardClock() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -167,6 +171,7 @@ function DashboardClock() {
         <time className="font-mono text-3xl font-semibold tabular-nums text-white" dateTime={now.toISOString()}>
           {clockFormat.format(now)}
         </time>
+        <p className="mt-2 text-sm font-medium text-gray-200">{dateFormat.format(now)}</p>
       </CardContent>
     </Card>
   );
@@ -182,22 +187,13 @@ const modules: Array<{
   actionClass: string;
 }> = [
   {
-    title: "Certificates",
-    description: "Create new certificates or manage certificates already issued.",
-    action: "Manage Certificate",
-    to: "/generate",
-    Icon: FileText,
-    iconClass: "bg-gradient-to-br from-blue-500 to-blue-700",
-    actionClass: "bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800",
-  },
-  {
-    title: "Mark Sheets",
-    description: "Create, find, edit, and download student mark sheets.",
-    action: "Manage Marksheet",
-    to: "/marksheets",
-    Icon: Database,
-    iconClass: "bg-gradient-to-br from-cyan-500 to-cyan-700",
-    actionClass: "bg-gradient-to-r from-cyan-600 to-cyan-800 hover:from-cyan-700 hover:to-cyan-900",
+    title: "Students",
+    description: "Add, search, update, archive, and restore student records.",
+    action: "Manage Student Record",
+    to: "/students",
+    Icon: Users,
+    iconClass: "bg-indigo-700",
+    actionClass: "bg-indigo-700 hover:bg-indigo-800",
   },
   {
     title: "Manage Fees",
@@ -209,13 +205,22 @@ const modules: Array<{
     actionClass: "bg-gradient-to-r from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800",
   },
   {
-    title: "Students",
-    description: "Add, search, update, archive, and restore student records.",
-    action: "Manage Student Record",
-    to: "/students",
-    Icon: Users,
-    iconClass: "bg-indigo-700",
-    actionClass: "bg-indigo-700 hover:bg-indigo-800",
+    title: "Mark Sheets",
+    description: "Create, find, edit, and download student mark sheets.",
+    action: "Manage Marksheet",
+    to: "/marksheets",
+    Icon: Database,
+    iconClass: "bg-gradient-to-br from-cyan-500 to-cyan-700",
+    actionClass: "bg-gradient-to-r from-cyan-600 to-cyan-800 hover:from-cyan-700 hover:to-cyan-900",
+  },
+  {
+    title: "Certificates",
+    description: "Create new certificates or manage certificates already issued.",
+    action: "Manage Certificate",
+    to: "/generate",
+    Icon: FileText,
+    iconClass: "bg-gradient-to-br from-blue-500 to-blue-700",
+    actionClass: "bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800",
   },
   {
     title: "Verify Certificate",
@@ -241,7 +246,9 @@ const Index = () => {
         </div>
         {isAdmin() && <FeeOverview />}
         <div className="mx-auto grid max-w-6xl gap-6 sm:grid-cols-2 xl:grid-cols-3">
-          {modules.map(({ title, description, action, to, Icon, iconClass, actionClass }) => (
+          {modules.map(({ title, description, action, to, Icon, iconClass, actionClass }, index) => (
+            <Fragment key={to}>
+              {index === 4 && <DashboardClock />}
             <Card key={to} className="border-white/20 bg-white/10 backdrop-blur-lg transition-all duration-300 hover:bg-white/15 hover:shadow-xl">
               <Link to={to} className="block rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
                 <CardHeader className="text-center">
@@ -256,8 +263,8 @@ const Index = () => {
                 </CardContent>
               </Link>
             </Card>
+            </Fragment>
           ))}
-          <DashboardClock />
         </div>
       </main>
     </div>
