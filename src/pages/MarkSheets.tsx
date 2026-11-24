@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CertificatePagination } from "@/components/manage-certificates/CertificatePagination";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import WorkspaceTabs from "@/components/WorkspaceTabs";
 import { createMarksheetPdf, downloadMarksheetBatch, type PrintableMarksheet } from "@/lib/marksheet-pdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -417,6 +418,7 @@ function MarkSheetWorkspace({ manage, certificateId, editLinked }: { manage: boo
             <h1 className="text-right text-xl font-semibold sm:text-center">Create Marksheet</h1>
           </div>
         </nav>
+        <WorkspaceTabs label="Mark sheet sections" tabs={[{ label: "Create Marksheet", to: "/marksheets", active: true }, { label: "Manage Marksheet", to: "/marksheets/manage", active: false }]} />
         <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
             <CardHeader>
@@ -463,6 +465,8 @@ function MarkSheetWorkspace({ manage, certificateId, editLinked }: { manage: boo
           <Button asChild size="sm" className="bg-blue-600 text-white hover:bg-blue-700"><Link to="/marksheets">Create Mark Sheet</Link></Button>
         </div>
       </nav>
+
+      <WorkspaceTabs label="Mark sheet sections" tabs={[{ label: "Create Marksheet", to: "/marksheets", active: false }, { label: "Manage Marksheet", to: "/marksheets/manage", active: true }]} />
 
       <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <Card className="border-white/20 bg-white/10 backdrop-blur-lg">

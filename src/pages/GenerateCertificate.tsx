@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, FileText } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import WorkspaceTabs from "@/components/WorkspaceTabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import QRCodeGenerator from "@/components/QRCodeGenerator";
@@ -243,6 +244,8 @@ const GenerateCertificate = () => {
           </div>
         </div>
       </nav>
+
+      <WorkspaceTabs label="Certificate sections" tabs={[{ label: "Create Certificate", to: "/generate", active: true }, { label: "Manage Certificate", to: "/manage", active: false }]} />
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Card className="bg-white/10 backdrop-blur-lg border-white/20">

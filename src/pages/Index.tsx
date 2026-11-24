@@ -1,7 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { FileText, Search, Plus, Settings, Shield, Cpu, Database, Clock, Users } from "lucide-react";
+import { Clock, Database, FileText, Shield, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const clockFormat = new Intl.DateTimeFormat("en-IN", {
@@ -16,7 +15,7 @@ function DashboardClock() {
   }, []);
 
   return (
-    <Card className="bg-white/10 backdrop-blur-lg border-white/20">
+    <Card className="border-white/20 bg-white/10 backdrop-blur-lg">
       <CardHeader className="text-center">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-indigo-700 shadow-lg">
           <Clock className="h-8 w-8 text-white" aria-hidden="true" />
@@ -33,154 +32,82 @@ function DashboardClock() {
   );
 }
 
-const Index = () => {
+const modules: Array<{
+  title: string;
+  description: string;
+  action: string;
+  to: string;
+  Icon: LucideIcon;
+  iconClass: string;
+  actionClass: string;
+}> = [
+  {
+    title: "Certificates",
+    description: "Create new certificates or manage certificates already issued.",
+    action: "Open Certificates",
+    to: "/generate",
+    Icon: FileText,
+    iconClass: "bg-gradient-to-br from-blue-500 to-blue-700",
+    actionClass: "bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800",
+  },
+  {
+    title: "Mark Sheets",
+    description: "Create, find, edit, and download student mark sheets.",
+    action: "Open Mark Sheets",
+    to: "/marksheets",
+    Icon: Database,
+    iconClass: "bg-gradient-to-br from-cyan-500 to-cyan-700",
+    actionClass: "bg-gradient-to-r from-cyan-600 to-cyan-800 hover:from-cyan-700 hover:to-cyan-900",
+  },
+  {
+    title: "Students",
+    description: "Add, search, update, archive, and restore student records.",
+    action: "Open Student Records",
+    to: "/students",
+    Icon: Users,
+    iconClass: "bg-indigo-700",
+    actionClass: "bg-indigo-700 hover:bg-indigo-800",
+  },
+  {
+    title: "Verify Certificate",
+    description: "Check a certificate using its QR code or certificate ID.",
+    action: "Verify Certificate",
+    to: "/verify",
+    Icon: Shield,
+    iconClass: "bg-gradient-to-br from-green-500 to-green-700",
+    actionClass: "bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800",
+  },
+];
 
-  return (
-    <div className="min-h-screen relative overflow-hidden">
-      {/* Dark overlay for better text readability */}
-      <div className="absolute inset-0 bg-black/40"></div>
-      
-      <div className="container mx-auto px-4 py-12 relative z-10">
-        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-              <Card className="hover:shadow-xl transition-all duration-300 cursor-pointer bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
-                <Link to="/generate">
-                  <CardHeader className="text-center">
-                    <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center mb-4 shadow-lg">
-                      <Plus className="h-8 w-8 text-white" />
-                    </div>
-                    <CardTitle className="text-xl text-white">Generate Certificate</CardTitle>
-                    <CardDescription className="text-gray-300">
-                      Create new certificates for students with digital signatures and QR codes
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button className="w-full bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800" size="lg">
-                      Start Creating
-                    </Button>
-                  </CardContent>
-                </Link>
-              </Card>
-
-              <Card className="hover:shadow-xl transition-all duration-300 cursor-pointer bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
-                <Link to="/manage">
-                  <CardHeader className="text-center">
-                    <div className="mx-auto w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-700 rounded-full flex items-center justify-center mb-4 shadow-lg">
-                      <Settings className="h-8 w-8 text-white" />
-                    </div>
-                    <CardTitle className="text-xl text-white">Manage Certificates</CardTitle>
-                    <CardDescription className="text-gray-300">
-                      View Edit and Manage<br />Already Created Certificate's
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button className="w-full bg-gradient-to-r from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800" size="lg">
-                      Manage Now
-                    </Button>
-                  </CardContent>
-                </Link>
-              </Card>
-
-          <Card className="hover:shadow-xl transition-all duration-300 bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
-            <CardHeader className="text-center">
-              <div className="mx-auto w-16 h-16 bg-gradient-to-br from-cyan-500 to-cyan-700 rounded-full flex items-center justify-center mb-4 shadow-lg">
-                <Database className="h-8 w-8 text-white" />
-              </div>
-              <CardTitle className="text-xl text-white">Create Mark Sheet</CardTitle>
-              <CardDescription className="text-gray-300">
-                Enter DCA terminal marks and create a new mark sheet.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild className="w-full bg-gradient-to-r from-cyan-600 to-cyan-800 hover:from-cyan-700 hover:to-cyan-900" size="lg">
-                <Link to="/marksheets">Create Mark Sheet</Link>
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-xl transition-all duration-300 bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
-            <CardHeader className="text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-indigo-700 shadow-lg">
-                <Users className="h-8 w-8 text-white" aria-hidden="true" />
-              </div>
-              <CardTitle className="text-xl text-white">Manage Students</CardTitle>
-              <CardDescription className="text-gray-300">Add, search, update, and archive student records.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild className="w-full bg-indigo-700 hover:bg-indigo-800" size="lg">
-                <Link to="/students">Open Student Records</Link>
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-xl transition-all duration-300 bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
-            <CardHeader className="text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-teal-700 shadow-lg">
-                <FileText className="h-8 w-8 text-white" aria-hidden="true" />
-              </div>
-              <CardTitle className="text-xl text-white">Manage Mark Sheets</CardTitle>
-              <CardDescription className="text-gray-300">Find, edit, and download saved mark sheets.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild className="w-full bg-teal-700 hover:bg-teal-800" size="lg">
-                <Link to="/marksheets/manage">Manage Mark Sheets</Link>
-              </Button>
-            </CardContent>
-          </Card>
-
-          <DashboardClock />
-
-          <Card className="hover:shadow-xl transition-all duration-300 cursor-pointer bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/15">
-            <Link to="/verify">
+const Index = () => (
+  <div className="relative min-h-screen overflow-hidden">
+    <div className="absolute inset-0 bg-black/40" />
+    <main className="container relative z-10 mx-auto px-4 py-8 sm:py-12">
+      <div className="mx-auto mb-7 max-w-6xl">
+        <h1 className="text-3xl font-bold text-white">Dashboard</h1>
+        <p className="mt-1 text-sm text-gray-200">Choose a work area to get started.</p>
+      </div>
+      <div className="mx-auto grid max-w-6xl gap-6 sm:grid-cols-2 xl:grid-cols-3">
+        {modules.map(({ title, description, action, to, Icon, iconClass, actionClass }) => (
+          <Card key={to} className="border-white/20 bg-white/10 backdrop-blur-lg transition-all duration-300 hover:bg-white/15 hover:shadow-xl">
+            <Link to={to} className="block rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
               <CardHeader className="text-center">
-                <div className="mx-auto w-16 h-16 bg-gradient-to-br from-green-500 to-green-700 rounded-full flex items-center justify-center mb-4 shadow-lg">
-                  <Shield className="h-8 w-8 text-white" />
+                <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full shadow-lg ${iconClass}`}>
+                  <Icon className="h-8 w-8 text-white" aria-hidden="true" />
                 </div>
-                <CardTitle className="text-xl text-white">Verify Certificate</CardTitle>
-                <CardDescription className="text-gray-300">
-                  Instantly verify the authenticity of any certificate using QR codes or certificate IDs
-                </CardDescription>
+                <CardTitle className="text-xl text-white">{title}</CardTitle>
+                <CardDescription className="text-gray-300">{description}</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800" size="lg">
-                  Verify Now
-                </Button>
+                <div className={`w-full rounded-md px-4 py-3 text-center font-medium text-white transition-colors ${actionClass}`}>{action}</div>
               </CardContent>
             </Link>
           </Card>
-
-        </div>
-
-        <div className="text-center mt-16">
-          <div className="bg-white/10 backdrop-blur-lg rounded-lg shadow-xl p-8 max-w-4xl mx-auto border-white/20">
-            <h2 className="text-2xl font-semibold text-white mb-4">Features</h2>
-            <div className="grid md:grid-cols-3 gap-6">
-              <div className="text-center">
-                <div className="bg-gradient-to-br from-cyan-400 to-cyan-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
-                  <FileText className="h-6 w-6 text-white" />
-                </div>
-                <h3 className="font-medium mb-2 text-white">Digital Certificates</h3>
-                <p className="text-sm text-gray-300">Professional certificate templates with institutional branding</p>
-              </div>
-              <div className="text-center">
-                <div className="bg-gradient-to-br from-orange-400 to-orange-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
-                  <Search className="h-6 w-6 text-white" />
-                </div>
-                <h3 className="font-medium mb-2 text-white">QR Verification</h3>
-                <p className="text-sm text-gray-300">Instant verification through QR codes and unique certificate IDs</p>
-              </div>
-              <div className="text-center">
-                <div className="bg-gradient-to-br from-pink-400 to-pink-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
-                  <Cpu className="h-6 w-6 text-white" />
-                </div>
-                <h3 className="font-medium mb-2 text-white">Smart Management</h3>
-                <p className="text-sm text-gray-300">Comprehensive tools for certificate lifecycle management</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        ))}
+        <DashboardClock />
       </div>
-    </div>
-  );
-};
+    </main>
+  </div>
+);
 
 export default Index;

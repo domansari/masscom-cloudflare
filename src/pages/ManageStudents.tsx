@@ -70,6 +70,7 @@ export default function ManageStudents() {
   const [selectedPhotoPreview, setSelectedPhotoPreview] = useState<string | null>(null);
   const [form, setForm] = useState<StudentForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"new" | "manage">("new");
   const [search, setSearch] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -125,6 +126,7 @@ export default function ManageStudents() {
       } else {
         toast({ title: editingId ? "Student record updated" : "Student added" });
         resetForm();
+        setActiveTab("manage");
       }
     } catch (cause) {
       toast({ title: "Could not save student", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" });
@@ -132,6 +134,7 @@ export default function ManageStudents() {
   };
 
   const edit = (student: Student) => {
+    setActiveTab("new");
     setEditingId(student.id);
     const oldName = student.student_name.split(/\s+/);
     setForm({ ...emptyForm, ...student, first_name: student.first_name || oldName.shift() || "", last_name: student.last_name || oldName.join(" "),
@@ -175,6 +178,12 @@ export default function ManageStudents() {
       <div className="rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-sm text-white backdrop-blur-lg"><Users className="mr-2 inline h-4 w-4" />{students.filter(student => student.is_active).length} active students</div>
     </div>
 
+    <div role="tablist" aria-label="Student sections" className="mb-6 inline-flex gap-1 rounded-lg border border-white/20 bg-black/20 p-1 shadow-sm backdrop-blur-lg">
+      <button type="button" role="tab" id="new-student-tab" aria-selected={activeTab === "new"} aria-controls="new-student-panel" onClick={() => setActiveTab("new")} className={activeTab === "new" ? "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm" : "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15"}>New Student</button>
+      <button type="button" role="tab" id="manage-students-tab" aria-selected={activeTab === "manage"} aria-controls="manage-students-panel" onClick={() => setActiveTab("manage")} className={activeTab === "manage" ? "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm" : "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15"}>Manage Students</button>
+    </div>
+
+    {activeTab === "new" && <section role="tabpanel" id="new-student-panel" aria-labelledby="new-student-tab">
     <Card className="mb-6 border-white/20 bg-white/10 backdrop-blur-lg"><CardHeader>
       <CardTitle className="text-white">{editingId ? "Edit Student Record" : "New Student"}</CardTitle>
       <CardDescription className="text-gray-200">Fields marked * are required. Only the last four Aadhaar digits are stored.</CardDescription>
@@ -231,7 +240,9 @@ export default function ManageStudents() {
         {editingId && <Button type="button" variant="outline" onClick={resetForm}><X className="mr-2 h-4 w-4" />Cancel Edit</Button>}
       </div>
     </form></CardContent></Card>
+    </section>}
 
+    {activeTab === "manage" && <section role="tabpanel" id="manage-students-panel" aria-labelledby="manage-students-tab">
     <Card className="border-white/20 bg-white/10 backdrop-blur-lg"><CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div><CardTitle className="text-white">Student Records</CardTitle><CardDescription className="text-gray-200">Search by name, roll number, batch, course, session, or contact.</CardDescription></div>
       <label className="flex items-center gap-2 text-sm text-white"><input type="checkbox" checked={includeArchived} onChange={event => setIncludeArchived(event.target.checked)} />Show archived students</label>
@@ -250,6 +261,7 @@ export default function ManageStudents() {
               {student.is_active ? <Button size="sm" variant="outline" onClick={() => setActive(student, false)} aria-label={`Archive ${student.student_name}`}><Archive className="h-4 w-4" /></Button> : <Button size="sm" variant="outline" onClick={() => setActive(student, true)} aria-label={`Restore ${student.student_name}`}><RotateCcw className="h-4 w-4" /></Button>}</div></td>
           </tr>)}</tbody></table></div>}
     </CardContent></Card>
+    </section>}
     </main>
   </div>;
 }

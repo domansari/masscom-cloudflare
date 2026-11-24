@@ -8,6 +8,7 @@ import { ArrowLeft, Download } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { downloadCertificateBatch } from "@/lib/batch-certificates";
 import { Link } from "react-router-dom";
+import WorkspaceTabs from "@/components/WorkspaceTabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -316,6 +317,8 @@ const ManageCertificates = () => {
           </div>
         </div>
       </nav>
+
+      <WorkspaceTabs label="Certificate sections" tabs={[{ label: "Create Certificate", to: "/generate", active: false }, { label: "Manage Certificate", to: "/manage", active: true }]} />
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Card className="bg-white/10 backdrop-blur-lg border-white/20">
