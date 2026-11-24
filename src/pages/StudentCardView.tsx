@@ -129,19 +129,6 @@ function MarksheetRecord({ sheet }: { sheet: Sheet }) {
     } catch { setNotice("Unable to prepare this marksheet."); }
     finally { setBusy(false); }
   }
-  async function print() {
-    const target = window.open("", "_blank");
-    if (!target) { setNotice("Allow pop-ups for this site to print the marksheet."); return; }
-    setBusy(true); setNotice("");
-    try {
-      const pdf = await build();
-      const url = URL.createObjectURL(pdf.output("blob"));
-      window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
-      target.opener = null;
-      target.location.replace(url);
-    } catch { target.close(); setNotice("Unable to prepare this marksheet for printing."); }
-    finally { setBusy(false); }
-  }
   return <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
     <CardHeader><CardTitle className="text-white">{sheet.exam_course ? course?.name || sheet.exam_course : "Marksheet"}</CardTitle><CardDescription className="text-gray-200">Registration No. {sheet.registration_no} · {sheet.issued_on ? "Issued " + sheet.issued_on : "Result in progress"}</CardDescription></CardHeader>
     <CardContent className="space-y-4">
@@ -149,9 +136,9 @@ function MarksheetRecord({ sheet }: { sheet: Sheet }) {
         const value = sheet[key as keyof Sheet];
         return <div key={key} className="rounded-md border border-white/15 bg-white/5 p-3"><p className="text-xs text-gray-300">{label} · {subject}</p><p className="mt-1 font-semibold">{value == null ? "Result awaited" : value + " / 100"}</p></div>;
       })}</div>
-      <div className="flex flex-wrap gap-2"><Button className={linkStyle} onClick={showPreview} disabled={busy}>{busy ? "Preparing…" : "Preview"}</Button><Button className={linkStyle} onClick={print} disabled={busy}><Printer className="h-4 w-4" />Print</Button></div>
+      <div className="flex flex-wrap gap-2"><Button className={linkStyle} onClick={showPreview} disabled={busy}>{busy ? "Preparing…" : "Preview"}</Button><Button className={linkStyle + " cursor-not-allowed opacity-50"} variant="outline" disabled title="Printing is disabled on this public preview"><Printer className="h-4 w-4" />Print disabled</Button></div>
       {notice && <p role="status" className="text-sm text-amber-100">{notice}</p>}
-      {preview && <iframe src={preview} title={"Marksheet preview " + sheet.registration_no} className="h-[75vh] min-h-96 w-full rounded-md border bg-slate-100" />}
+      {preview && <iframe src={preview + "#toolbar=0&navpanes=0&scrollbar=0"} title={"Marksheet preview " + sheet.registration_no} className="h-[75vh] min-h-96 w-full rounded-md border bg-slate-100" />}
     </CardContent>
   </Card>;
 }
@@ -182,25 +169,12 @@ function CertificateRecord({ certificate }: { certificate: Certificate }) {
     } catch { setNotice("Unable to prepare this certificate."); }
     finally { setBusy(false); }
   }
-  async function print() {
-    const target = window.open("", "_blank");
-    if (!target) { setNotice("Allow pop-ups for this site to print the certificate."); return; }
-    setBusy(true); setNotice("");
-    try {
-      const pdf = await build();
-      const url = URL.createObjectURL(pdf.output("blob"));
-      window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
-      target.opener = null;
-      target.location.replace(url);
-    } catch { target.close(); setNotice("Unable to prepare this certificate for printing."); }
-    finally { setBusy(false); }
-  }
   return <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
     <CardHeader><CardTitle className="text-white">{certificate.course_name}</CardTitle><CardDescription className="text-gray-200">Certificate ID {certificate.certificate_id} · {certificate.completion_date}{certificate.grade ? " · " + certificate.grade : ""}</CardDescription></CardHeader>
     <CardContent className="space-y-4">
-      <div className="flex flex-wrap gap-2"><Button className={linkStyle} onClick={showPreview} disabled={busy}>{busy ? "Preparing…" : "Preview"}</Button><Button className={linkStyle} onClick={print} disabled={busy}><Printer className="h-4 w-4" />Print</Button></div>
+      <div className="flex flex-wrap gap-2"><Button className={linkStyle} onClick={showPreview} disabled={busy}>{busy ? "Preparing…" : "Preview"}</Button><Button className={linkStyle + " cursor-not-allowed opacity-50"} variant="outline" disabled title="Printing is disabled on this public preview"><Printer className="h-4 w-4" />Print disabled</Button></div>
       {notice && <p role="status" className="text-sm text-amber-100">{notice}</p>}
-      {preview && <iframe src={preview} title={"Certificate preview " + certificate.certificate_id} className="h-[75vh] min-h-96 w-full rounded-md border bg-slate-100" />}
+      {preview && <iframe src={preview + "#toolbar=0&navpanes=0&scrollbar=0"} title={"Certificate preview " + certificate.certificate_id} className="h-[75vh] min-h-96 w-full rounded-md border bg-slate-100" />}
       <div ref={source} aria-hidden="true" className="fixed left-[-10000px] top-0"><CertificatePreview data={data} /></div>
     </CardContent>
   </Card>;
