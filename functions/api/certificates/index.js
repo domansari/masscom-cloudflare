@@ -1,6 +1,7 @@
 
 import { examCourseCode, examCourseNames, marksheetResult, passingMark, validExamMarks } from "../_exam-courses.js";
 import { requireCertificateUser, sameOrigin } from "../_admin.js";
+import { hasUnpaidDues } from "../_student-fee-plan.js";
 
 export async function onRequestGet({ request, env }) {
   try {
@@ -135,6 +136,18 @@ export async function onRequestPost({ request, env }) {
 
     if (qr?.certificateId !== values.certificate_id)
       return Response.json({ error: "Certificate ID mismatch" }, { status: 400 });
+
+    if (!values.roll_no || !values.batch_number) {
+      return Response.json({ error: "A student roll number and batch are required to verify the fee plan." }, { status: 409 });
+    }
+    const enrolledStudent = await env.DB.prepare(
+      "SELECT * FROM students WHERE lower(trim(roll_no)) = lower(trim(?)) AND lower(trim(COALESCE(section_batch, batch_code))) = lower(trim(?)) AND lower(trim(student_name)) = lower(trim(?)) LIMIT 1"
+    ).bind(values.roll_no, values.batch_number, values.student_name).first();
+    if (!enrolledStudent) {
+      return Response.json({ error: "Add this student to Manage Students and complete the fee plan before issuing a certificate." }, { status: 409 });
+    }
+    const dues = await hasUnpaidDues(env, enrolledStudent, { includeCertificateFee: true });
+    if (dues.blocked) return Response.json({ error: dues.reason, fee_plan: dues.plan }, { status: 409 });
 
     const id = crypto.randomUUID();
     const columns = ["id", ...fields, "created_by"];

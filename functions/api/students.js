@@ -2,6 +2,7 @@ import { confirmDeletePassword } from "./_delete-password.js";
 import { requireAdmin, sameOrigin } from "./_admin.js";
 import { certificateCourseOptions } from "./_exam-courses.js";
 import { batchTimings, buildEnrollmentNo, normalizeSessionYear } from "./_student-enrollment.js";
+import { buildBaseFeePlan, courseDurationMonths, feePlanStatements } from "./_student-fee-plan.js";
 
 const json = (data, status = 200) => Response.json(data, {
   status,
@@ -17,6 +18,7 @@ const limits = {
   aadhaar_last4: 4, session_year: 4, section_batch: 64, batch_timing: 32,
 };
 const feeFields = ["one_time_fee", "monthly_fee"];
+const planFields = ["course_duration_months", "waive_last_two_months"]
 
 function validDate(value) {
   if (!value) return true;
@@ -59,6 +61,10 @@ function normalize(data, existingCourse = "") {
   student.roll_no = student.roll_no || `MIE-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
   if (!student.student_name || !student.father_name || !student.course_name || !student.date_of_birth || !validDate(student.admission_date) || !validDate(student.date_of_birth)) return null;
   if (!certificateCourseOptions.includes(student.course_name) && student.course_name !== existingCourse) return null;
+  const duration = Number(data.course_duration_months || courseDurationMonths(student.course_name) || 0);
+  if (!Number.isInteger(duration) || duration < 1 || duration > 120) return null;
+  student.course_duration_months = duration;
+  student.waive_last_two_months = data.waive_last_two_months === true || data.waive_last_two_months === 1 || data.waive_last_two_months === "1" ? 1 : 0;
   if (student.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(student.email)) return null;
   return student;
 }
@@ -103,15 +109,26 @@ export async function onRequest({ request, env }) {
     const student = normalize(data, existingCourse);
     if (!student) return json({ error: "Enter a student name, valid dates, and check that each field is within its length limit." }, 400);
     const isActive = data.is_active === 0 ? 0 : 1;
-    const writeFields = [...fields, ...feeFields];
+    const writeFields = [...fields, ...feeFields, ...planFields];
     const values = writeFields.map(field => student[field]);
     const recordId = method === "POST" ? crypto.randomUUID() : id;
     let result;
     if (method === "POST") {
-      result = await env.DB.prepare(
-        `INSERT INTO students (${["id", ...writeFields, "is_active", "created_by"].join(", ")}) VALUES (${Array(writeFields.length + 3).fill("?").join(", ")})`
-      ).bind(recordId, ...values, isActive, account.adminId).run();
+      const columns = ["id", ...writeFields, "is_active", "created_by"];
+      const studentInsert = env.DB.prepare(
+        "INSERT INTO students (" + columns.join(", ") + ") VALUES (" + Array(columns.length).fill("?").join(", ") + ")"
+      ).bind(recordId, ...values, isActive, account.adminId);
+      const plan = buildBaseFeePlan({ ...student, id: recordId });
+      const statements = [studentInsert, ...await feePlanStatements(env, plan, account.adminId)];
+      [result] = await env.DB.batch(statements);
     } else {
+      const currentStudent = await env.DB.prepare("SELECT one_time_fee, monthly_fee, course_duration_months, waive_last_two_months FROM students WHERE id = ? LIMIT 1").bind(id).first();
+      if (!currentStudent) return json({ error: "Student not found" }, 404);
+      const planChanged = ["one_time_fee", "monthly_fee", "course_duration_months", "waive_last_two_months"].some(field => Number(currentStudent[field] || 0) !== Number(student[field] || 0));
+      if (planChanged) {
+        const priorPayment = await env.DB.prepare("SELECT id FROM fee_payments WHERE student_id = ? AND fee_plan_item_id IS NOT NULL LIMIT 1").bind(id).first();
+        if (priorPayment) return json({ error: "The fee plan cannot be changed after a payment is recorded. Update it before collecting a payment." }, 409);
+      }
       const existingCard = await env.DB.prepare("SELECT id FROM student_id_cards WHERE student_id = ? LIMIT 1").bind(id).first();
       const enrollment = buildEnrollmentNo(student);
       if (existingCard && !enrollment) return json({ error: "Keep Roll No., Section / Batch, and Session Year filled so the Enrollment No. stays valid." }, 400);
@@ -119,6 +136,11 @@ export async function onRequest({ request, env }) {
         `UPDATE students SET ${writeFields.map(field => `${field} = ?`).join(", ")}, is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
       ).bind(...values, isActive, id);
       const statements = [updateStudent];
+      if (planChanged) {
+        statements.push(env.DB.prepare("DELETE FROM student_fee_plan_items WHERE student_id = ? AND fee_category IN (?, ?, ?)").bind(id, "Admission Fee", "Monthly Fee", "Certificate Issue Fee"));
+        const plan = buildBaseFeePlan({ ...student, id });
+        statements.push(...await feePlanStatements(env, plan, account.adminId));
+      }
       if (existingCard && enrollment) {
         statements.push(env.DB.prepare("UPDATE student_id_cards SET registration_no = ?, updated_at = CURRENT_TIMESTAMP WHERE student_id = ?").bind(enrollment, id));
       }

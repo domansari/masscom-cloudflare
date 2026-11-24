@@ -65,16 +65,39 @@ export async function onRequest({ request, env }) {
       ).bind(studentId).first();
       if (!student) return json({ error: "Student not found." }, 404);
       if (!student.is_active) return json({ error: "Restore this student before collecting a fee." }, 409);
+      const planItemId = typeof data.fee_plan_item_id === "string" ? data.fee_plan_item_id.trim() : "";
+      if (planItemId) {
+        const planItem = await env.DB.prepare("SELECT * FROM student_fee_plan_items WHERE id = ? AND student_id = ? AND is_active = 1").bind(planItemId, studentId).first();
+        if (!planItem || Number(planItem.is_waived) || planItem.fee_category !== payment.fee_category || (planItem.period || "") !== (payment.period || "")) {
+          return json({ error: "That fee plan item is invalid, inactive, or does not match the payment." }, 409);
+        }
+        const paid = await env.DB.prepare("SELECT COALESCE(SUM(amount), 0) AS amount FROM fee_payments WHERE fee_plan_item_id = ?").bind(planItemId).first();
+        if (Number(paid?.amount || 0) + payment.amount > Number(planItem.amount) + 0.001) {
+          return json({ error: "Payment amount is greater than the remaining fee plan balance." }, 400);
+        }
+      }
       const id = crypto.randomUUID();
       const receiptNo = "FEE-" + new Date().getFullYear() + "-" + id.slice(0, 8).toUpperCase();
       await env.DB.prepare(
         `INSERT INTO fee_payments
          (id, receipt_no, student_id, student_name, enrollment_no, fee_category, amount, payment_date,
-          payment_method, upi_reference_number, period, notes, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          payment_method, upi_reference_number, fee_plan_item_id, period, notes, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(id, receiptNo, student.id, student.student_name, buildEnrollmentNo(student), payment.fee_category,
-        payment.amount, payment.payment_date, payment.payment_method, payment.upi_reference_number, payment.period, payment.notes, account.adminId).run();
+        payment.amount, payment.payment_date, payment.payment_method, payment.upi_reference_number, planItemId || null, payment.period, payment.notes, account.adminId).run();
       return json({ success: true, id, receipt_no: receiptNo }, 201);
+    }
+
+    const linkedPayment = await env.DB.prepare("SELECT id, student_id, fee_plan_item_id FROM fee_payments WHERE id = ?").bind(id).first();
+    if (linkedPayment?.fee_plan_item_id) {
+      const planItem = await env.DB.prepare("SELECT * FROM student_fee_plan_items WHERE id = ? AND student_id = ? AND is_active = 1").bind(linkedPayment.fee_plan_item_id, linkedPayment.student_id).first();
+      if (!planItem || Number(planItem.is_waived) || planItem.fee_category !== payment.fee_category || (planItem.period || "") !== (payment.period || "")) {
+        return json({ error: "Keep the receipt aligned with its fee plan item." }, 409);
+      }
+      const otherPaid = await env.DB.prepare("SELECT COALESCE(SUM(amount), 0) AS amount FROM fee_payments WHERE fee_plan_item_id = ? AND id <> ?").bind(planItem.id, id).first();
+      if (Number(otherPaid?.amount || 0) + payment.amount > Number(planItem.amount) + 0.001) {
+        return json({ error: "Payment amount is greater than the remaining fee plan balance." }, 400);
+      }
     }
 
     await env.DB.prepare(
@@ -87,7 +110,8 @@ export async function onRequest({ request, env }) {
   } catch (error) {
     if (error instanceof SyntaxError) return json({ error: "Invalid request" }, 400);
     const message = String(error?.message || "");
-    if (/no such table: fee_payments/i.test(message)) return json({ error: "Fee database update is required. Apply migrations/0013_fee_payments.sql in D1, then try again." }, 503);
+    if (/no such table: fee_payments/i.test(message)) return json({ error: "Fee database update is required. Apply the fee payment migration in D1, then try again." }, 503);
+    if (/no such table: student_fee_plan_items|no such column: fee_plan_item_id/i.test(message)) return json({ error: "Fee plan database update is required. Apply migrations/0016_fee_plan.sql in D1, then try again." }, 503);
     return json({ error: "Unable to complete the fee request" }, 500);
   }
 }

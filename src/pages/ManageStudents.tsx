@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { certificateCourseOptions } from "../../functions/api/_exam-courses.js";
 import { batchTimings, buildEnrollmentNo } from "../../functions/api/_student-enrollment.js";
-import { formatSessionYear } from "@/lib/date-format";
+import { courseDurationMonths } from "@/lib/course-duration";
+import { formatIndianDate, formatSessionYear } from "@/lib/date-format";
 import StudentPreview from "./StudentPreview";
 import StudentIdCard, { type StudentIdCardRecord } from "@/components/StudentIdCard";
 import html2canvas from "html2canvas";
@@ -23,12 +24,15 @@ type Student = {
   course_name: string | null; session_year: string | null; batch_timing: string | null;
   admission_date: string | null; date_of_birth: string | null; phone: string | null; email: string | null;
   address: string | null; notes: string | null; one_time_fee: number | null; monthly_fee: number | null;
-  is_active: number;
+  course_duration_months: number | null; waive_last_two_months: number; is_active: number;
 };
 
 type StudentForm = Omit<Student, "id" | "is_active">;
 type DocumentType = "photo";
 type StudentDocument = { document_type: DocumentType; file_name: string; content_type: string; file_size: number; created_at: string };
+type FeeReceipt = { id: string; receipt_no: string; amount: number; payment_date: string; period: string };
+type FeePlanItem = { id: string; fee_category: string; description: string; amount: number; paid_amount: number; remaining_amount: number; due_date: string; period: string; is_waived: boolean; status: "paid" | "pending" | "upcoming" | "waived"; receipts: FeeReceipt[] };
+type FeePlan = { student_id: string; student_name: string; roll_no: string | null; course_name: string | null; duration_months: number; configured: boolean; total_amount: number; paid_amount: number; pending_amount: number; upcoming_amount: number; outstanding_amount: number; items: FeePlanItem[] };
 const documentField = { type: "photo" as const, label: "Student Photo", accept: "image/jpeg,image/png,image/webp" };
 const emptyDocumentFiles = (): Record<DocumentType, File | null> => ({ photo: null });
 const today = new Date();
@@ -39,7 +43,7 @@ const emptyForm: StudentForm = {
   student_name: "", first_name: "", last_name: "", father_name: "", mother_name: "", gender: "Male", category: "",
   aadhaar_last4: "", roll_no: "", batch_code: "", section_batch: "", course_name: "",
   session_year: currentSession, batch_timing: "", admission_date: dateInput, date_of_birth: "", phone: "", email: "", address: "", notes: "",
-  one_time_fee: null, monthly_fee: null,
+  one_time_fee: null, monthly_fee: null, course_duration_months: null, waive_last_two_months: 0,
 };
 
 async function request(method: string, id?: string, body?: object) {
@@ -74,6 +78,7 @@ async function requestIdCards(method = "GET", id?: string, body?: object) {
 }
 
 const display = (value: string | number | null) => value == null || value === "" ? "—" : String(value);
+const feeMoney = (value: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
 
 function Section({ title, children, id }: { title: string; children: ReactNode; id?: string }) {
   return <section id={id} className="space-y-4"><h3 className="border-b border-white/20 pb-2 text-lg font-semibold text-white">{title}</h3><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div></section>;
@@ -92,7 +97,7 @@ export default function ManageStudents() {
   const [selectedPhotoPreview, setSelectedPhotoPreview] = useState<string | null>(null);
   const [form, setForm] = useState<StudentForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"new" | "manage" | "preview" | "id-card">("new");
+  const [activeTab, setActiveTab] = useState<"new" | "manage" | "fee-plan" | "preview" | "id-card">("new");
   const [previewStudentId, setPreviewStudentId] = useState<string | null>(null);
   const [idCards, setIdCards] = useState<StudentIdCardRecord[]>([]);
   const [selectedIdCardId, setSelectedIdCardId] = useState<string | null>(null);
@@ -108,6 +113,13 @@ export default function ManageStudents() {
   const [cardDeleting, setCardDeleting] = useState(false);
   const idCardPreviewRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
+  const [feePlanSearch, setFeePlanSearch] = useState("");
+  const [feePlanStudentId, setFeePlanStudentId] = useState("");
+  const [feePlan, setFeePlan] = useState<FeePlan | null>(null);
+  const [feePlanLoading, setFeePlanLoading] = useState(false);
+  const [feePlanError, setFeePlanError] = useState("");
+  const [reexamAmount, setReexamAmount] = useState("");
+  const [reexamBusy, setReexamBusy] = useState(false);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -128,6 +140,19 @@ export default function ManageStudents() {
     setSearchParams({}, { replace: true });
     if (focusFees) window.setTimeout(() => document.getElementById("student-fees")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
   }, [students, searchParams]);
+  useEffect(() => {
+    if (activeTab !== "fee-plan" || !feePlanStudentId) { setFeePlan(null); return; }
+    let active = true;
+    setFeePlanLoading(true);
+    setFeePlanError("");
+    fetch("/api/student-fee-plan?student_id=" + encodeURIComponent(feePlanStudentId), { cache: "no-store" })
+      .then(async response => { const result = await response.json(); if (!response.ok) throw new Error(result.error || "Unable to load fee plan."); return result; })
+      .then(result => { if (active) setFeePlan(result.data || null); })
+      .catch(cause => { if (active) setFeePlanError(cause instanceof Error ? cause.message : "Unable to load fee plan."); })
+      .finally(() => { if (active) setFeePlanLoading(false); });
+    return () => { active = false; };
+  }, [activeTab, feePlanStudentId]);
+
   useEffect(() => {
     if (activeTab !== "id-card") return;
     let active = true;
@@ -159,6 +184,22 @@ export default function ManageStudents() {
   }, [students, search, includeArchived]);
 
   const updateField = (field: keyof StudentForm, value: string) => setForm(current => ({ ...current, [field]: value }));
+  const matchingFeeStudents = students.filter(student => !feePlanSearch.trim() || String(student.roll_no || "").toLowerCase().includes(feePlanSearch.trim().toLowerCase()));
+  const estimatedPlanTotal = Number(form.one_time_fee || 0) + Number(form.monthly_fee || 0) * Math.max(0, Number(form.course_duration_months || 0) - (form.waive_last_two_months ? 2 : 0)) + 250;
+  const activateReexamFee = async () => {
+    if (!feePlanStudentId || reexamBusy) return;
+    const amount = Number(reexamAmount);
+    if (!Number.isFinite(amount) || amount <= 0) { setFeePlanError("Enter a valid re-exam fee amount."); return; }
+    setReexamBusy(true); setFeePlanError("");
+    try {
+      const response = await fetch("/api/student-fee-plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "activate_reexam_fee", student_id: feePlanStudentId, amount }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not activate re-exam fee.");
+      setFeePlan(result.data); setReexamAmount("");
+      toast({ title: "Re-exam fee activated", description: "It is now included in this fee plan." });
+    } catch (cause) { setFeePlanError(cause instanceof Error ? cause.message : "Could not activate re-exam fee."); }
+    finally { setReexamBusy(false); }
+  };
   const loadDocuments = async (studentId: string) => {
     const result = await requestDocuments(studentId);
     setDocuments(result.data || []);
@@ -214,6 +255,8 @@ export default function ManageStudents() {
     const oldName = student.student_name.split(/\s+/);
     setForm({ ...emptyForm, ...student, first_name: student.first_name || oldName.shift() || "", last_name: student.last_name || oldName.join(" "),
       one_time_fee: student.one_time_fee ?? null, monthly_fee: student.monthly_fee ?? null,
+      course_duration_months: student.course_duration_months ?? courseDurationMonths(student.course_name) ?? null,
+      waive_last_two_months: student.waive_last_two_months ?? 0,
       admission_date: student.admission_date || "", date_of_birth: student.date_of_birth || "" });
     setDocumentFiles(emptyDocumentFiles());
     void loadDocuments(student.id).catch(cause => toast({ title: "Could not load student documents", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" }));
@@ -359,6 +402,7 @@ export default function ManageStudents() {
     <div role="tablist" aria-label="Student sections" className="mb-6 inline-flex gap-1 rounded-lg border border-white/20 bg-black/20 p-1 shadow-sm backdrop-blur-lg">
       <button type="button" role="tab" id="new-student-tab" aria-selected={activeTab === "new"} aria-controls="new-student-panel" onClick={() => setActiveTab("new")} className={activeTab === "new" ? "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm" : "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15"}>New Student</button>
       <button type="button" role="tab" id="manage-students-tab" aria-selected={activeTab === "manage"} aria-controls="manage-students-panel" onClick={() => setActiveTab("manage")} className={activeTab === "manage" ? "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm" : "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15"}>Manage Students</button>
+      <button type="button" role="tab" id="fee-plan-tab" aria-selected={activeTab === "fee-plan"} aria-controls="fee-plan-panel" onClick={() => setActiveTab("fee-plan")} className={activeTab === "fee-plan" ? "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm" : "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15"}>Fee Plan</button>
       <button type="button" role="tab" id="preview-student-tab" aria-selected={activeTab === "preview"} aria-controls="preview-student-panel" onClick={() => setActiveTab("preview")} className={activeTab === "preview" ? "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm" : "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15"}>Preview</button>
       <button type="button" role="tab" id="id-card-tab" aria-selected={activeTab === "id-card"} aria-controls="id-card-panel" onClick={() => setActiveTab("id-card")} className={activeTab === "id-card" ? "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm" : "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15"}>ID Card</button>
     </div>
@@ -379,20 +423,23 @@ export default function ManageStudents() {
       </Section>
 
       <Section title="Course / Class">
-        <div className="space-y-2"><Label htmlFor="course_name" className="text-white">Course / Class *</Label><select id="course_name" required className="h-10 w-full rounded-md border border-white/30 bg-white/20 px-3 text-sm text-white" value={form.course_name || ""} onChange={event => updateField("course_name", event.target.value)}>
+        <div className="space-y-2"><Label htmlFor="course_name" className="text-white">Course / Class *</Label><select id="course_name" required className="h-10 w-full rounded-md border border-white/30 bg-white/20 px-3 text-sm text-white" value={form.course_name || ""} onChange={event => { const course = event.target.value; setForm(current => ({ ...current, course_name: course, course_duration_months: courseDurationMonths(course) })); }}>
           <option value="" className="text-gray-900">Select certificate course</option>
           {editingId && form.course_name && !certificateCourseOptions.includes(form.course_name) && <option className="text-gray-900" value={form.course_name}>{form.course_name} (existing record)</option>}
           {certificateCourseOptions.map(course => <option className="text-gray-900" key={course} value={course}>{course}</option>)}
         </select></div>
+        <div className="space-y-2"><Label htmlFor="course-duration-months" className="text-white">Course Duration (Months) *</Label><Input id="course-duration-months" type="number" min="1" max="120" required value={form.course_duration_months ?? ""} onChange={event => updateField("course_duration_months", event.target.value)} className="border-white/30 bg-white/20 text-white" /><p className="text-xs text-gray-200">Automatically filled from the course; adjust only when this student has a different duration.</p></div>
         {field("session_year", "Session Year (YYYY)", false, "text", "Enter a four-digit year, for example 2026.")}{field("roll_no", "Roll Number", false, "text", "Used in the Enrollment No.")}
         {field("section_batch", "Section / Batch")}
         <div className="space-y-2"><Label htmlFor="batch_timing" className="text-white">Batch Timing</Label><select id="batch_timing" className="h-10 w-full rounded-md border border-white/30 bg-white/20 px-3 text-sm text-white" value={form.batch_timing || ""} onChange={event => updateField("batch_timing", event.target.value)}><option value="" className="text-gray-900">Select batch timing</option>{batchTimings.map(timing => <option key={timing} value={timing} className="text-gray-900">{timing}</option>)}</select></div>
         {field("admission_date", "Admission Date", false, "date")}
       </Section>
 
-      <Section title="Fee" id="student-fees">
-        {field("one_time_fee", "One-time Fee (₹)", false, "number", "Leave blank to use the course fee.")}
-        {field("monthly_fee", "Monthly Fee (₹)", false, "number", "Record the monthly fee for this student.")}
+      <Section title="Fee Plan" id="student-fees">
+        {field("one_time_fee", "Admission Fee (₹)", false, "number", "Due on the admission date.")}
+        {field("monthly_fee", "Monthly Fee (₹)", false, "number", "This amount is multiplied by the course duration.")}
+        <div className="space-y-2"><Label className="flex items-center gap-2 text-white"><input type="checkbox" checked={Boolean(form.waive_last_two_months)} onChange={event => setForm(current => ({ ...current, waive_last_two_months: event.target.checked ? 1 : 0 }))} />Waive the final two monthly installments</Label><p className="text-xs text-gray-200">The waived months remain visible in the plan and are excluded from the total.</p></div>
+        <div className="rounded-md border border-white/20 bg-white/5 p-3 text-sm text-white"><strong>Estimated plan total:</strong> ₹{estimatedPlanTotal.toLocaleString("en-IN")} <span className="text-gray-300">(includes ₹250 certificate issue fee; re-exam fees are added only when activated)</span></div>
       </Section>
 
       <section className="space-y-4"><h3 className="border-b border-white/20 pb-2 text-lg font-semibold text-white">Student Photo</h3>
@@ -449,6 +496,36 @@ export default function ManageStudents() {
     </CardContent></Card>
     </section>}
 
+    {activeTab === "fee-plan" && <section role="tabpanel" id="fee-plan-panel" aria-labelledby="fee-plan-tab">
+      <Card className="border-white/20 bg-white/10 backdrop-blur-lg"><CardHeader>
+        <CardTitle className="text-white">Student Fee Plan</CardTitle>
+        <CardDescription className="text-gray-200">Search by roll number to review dues, payments, receipts, and upcoming installments.</CardDescription>
+      </CardHeader><CardContent className="space-y-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2"><Label htmlFor="fee-plan-search" className="text-white">Search student by Roll Number</Label><Input id="fee-plan-search" value={feePlanSearch} onChange={event => setFeePlanSearch(event.target.value)} placeholder="Enter roll number" className="border-white/30 bg-white/20 text-white placeholder:text-gray-300" /></div>
+          <div className="space-y-2"><Label htmlFor="fee-plan-student" className="text-white">Select Student</Label><select id="fee-plan-student" value={feePlanStudentId} onChange={event => setFeePlanStudentId(event.target.value)} className="h-10 w-full rounded-md border border-white/30 bg-white/20 px-3 text-sm text-white"><option value="" className="text-slate-900">Select a student</option>{matchingFeeStudents.map(student => <option key={student.id} value={student.id} className="text-slate-900">{student.roll_no || "No roll number"} · {student.student_name}</option>)}</select></div>
+        </div>
+        {feePlanError && <p role="alert" className="rounded-md border border-red-300/30 bg-red-500/10 p-3 text-sm text-red-100">{feePlanError}</p>}
+        {feePlanLoading ? <p className="py-8 text-center text-gray-200">Loading fee plan…</p> : !feePlanStudentId ? <p className="py-8 text-center text-gray-200">Search and select a student to view the fee plan.</p> : feePlan && <>
+          <div className="rounded-lg border border-white/20 bg-white/5 p-4"><h3 className="font-semibold text-white">{feePlan.student_name} · {feePlan.roll_no || "No roll number"}</h3><p className="text-sm text-gray-300">{feePlan.course_name || "—"} · {feePlan.duration_months} months</p></div>
+          {!feePlan.configured && <p role="alert" className="rounded-md border border-amber-300/30 bg-amber-400/10 p-3 text-sm text-amber-100">Fee plan is incomplete. Set a monthly fee and course duration before issuing a final marksheet or certificate.</p>}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-white/20 bg-white/5 p-4"><p className="text-sm text-gray-300">Total Plan</p><p className="mt-1 text-xl font-bold text-white">{feeMoney(feePlan.total_amount)}</p></div>
+            <div className="rounded-lg border border-white/20 bg-white/5 p-4"><p className="text-sm text-gray-300">Paid</p><p className="mt-1 text-xl font-bold text-emerald-300">{feeMoney(feePlan.paid_amount)}</p></div>
+            <div className="rounded-lg border border-white/20 bg-white/5 p-4"><p className="text-sm text-gray-300">Due / Pending</p><p className="mt-1 text-xl font-bold text-amber-200">{feeMoney(feePlan.pending_amount)}</p></div>
+            <div className="rounded-lg border border-white/20 bg-white/5 p-4"><p className="text-sm text-gray-300">Upcoming</p><p className="mt-1 text-xl font-bold text-red-300">{feeMoney(feePlan.upcoming_amount)}</p></div>
+          </div>
+          <div className="flex flex-wrap items-end gap-3 rounded-lg border border-white/20 bg-white/5 p-4">
+            <div className="mr-auto"><h3 className="font-semibold text-white">Re-exam Fee</h3><p className="text-sm text-gray-300">Inactive until you activate it for this student.</p></div>
+            <div className="space-y-1"><Label htmlFor="reexam-fee-amount" className="text-xs text-gray-200">Amount (₹)</Label><Input id="reexam-fee-amount" type="number" min="0.01" step="0.01" value={reexamAmount} onChange={event => setReexamAmount(event.target.value)} className="w-40 border-white/30 bg-white/20 text-white" /></div>
+            <Button type="button" disabled={reexamBusy || !reexamAmount} onClick={() => void activateReexamFee()} className="bg-gradient-to-r from-blue-500 to-blue-700 text-white shadow-lg hover:from-blue-600 hover:to-blue-800">{reexamBusy ? "Activating…" : "Activate Re-exam Fee"}</Button>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-white/15"><table className="w-full min-w-[900px] text-left text-sm text-white"><thead><tr className="border-b border-white/20 text-gray-200"><th className="px-3 py-3">Fee</th><th className="px-3 py-3">Due Date</th><th className="px-3 py-3">Amount</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Receipts</th><th className="px-3 py-3">Action</th></tr></thead><tbody>
+            {feePlan.items.map(item => <tr key={item.id} className="border-b border-white/10 last:border-0"><td className="px-3 py-3 font-medium">{item.description}{item.period && <div className="text-xs text-gray-300">{item.period}</div>}</td><td className="px-3 py-3 whitespace-nowrap">{formatIndianDate(item.due_date)}</td><td className="px-3 py-3">{feeMoney(item.amount)}{item.remaining_amount > 0 && item.remaining_amount < item.amount && <div className="text-xs text-gray-300">Balance {feeMoney(item.remaining_amount)}</div>}</td><td className="px-3 py-3"><span className="inline-flex items-center gap-2"><span className={"h-2.5 w-2.5 rounded-full " + (item.status === "paid" ? "bg-emerald-400" : item.status === "pending" ? "bg-amber-300" : item.status === "upcoming" ? "bg-red-400" : "bg-gray-300")} />{item.status === "paid" ? "Paid" : item.status === "pending" ? "Pending" : item.status === "upcoming" ? "Upcoming" : "Waived"}</span></td><td className="px-3 py-3">{item.receipts.length ? <div className="space-y-1">{item.receipts.map(receipt => <div key={receipt.id} className="whitespace-nowrap text-xs"><span className="font-medium">{receipt.receipt_no}</span> · {formatIndianDate(receipt.payment_date)} <Link className="ml-1 text-emerald-300 underline" to={"/fees?receipt=" + encodeURIComponent(receipt.id)}>Print</Link></div>)}</div> : "—"}</td><td className="px-3 py-3">{!item.is_waived && item.remaining_amount > 0 ? <Button asChild size="sm" className="bg-gradient-to-r from-emerald-500 to-emerald-700 text-white hover:from-emerald-600 hover:to-emerald-800"><Link to={"/fees?student_id=" + encodeURIComponent(feePlan.student_id) + "&plan_item_id=" + encodeURIComponent(item.id)}>Collect</Link></Button> : "—"}</td></tr>)}
+          </tbody></table></div>
+        </>}
+      </CardContent></Card>
+    </section>}
     {activeTab === "preview" && <section role="tabpanel" id="preview-student-panel" aria-labelledby="preview-student-tab">
       {previewStudentId ? <StudentPreview studentId={previewStudentId} embedded /> : <Card aria-label="Student preview is empty" className="min-h-64 border-white/20 bg-white/10 backdrop-blur-lg"><CardContent className="min-h-64" /></Card>}
     </section>}

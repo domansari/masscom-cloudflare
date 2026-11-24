@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { buildEnrollmentNo } from "../../functions/api/_student-enrollment.js";
 import { formatIndianDate } from "@/lib/date-format";
 
@@ -18,7 +18,7 @@ type Student = {
 type FeePayment = {
   id: string; receipt_no: string; student_id: string | null; student_name: string;
   enrollment_no: string | null; fee_category: string; amount: number; payment_date: string;
-  payment_method: string; upi_reference_number: string | null; period: string | null; notes: string | null;
+  payment_method: string; upi_reference_number: string | null; fee_plan_item_id: string | null; period: string | null; notes: string | null;
 };
 type FeeReceipt = { receipt_no: string; student_name: string; enrollment_no: string; fee_category: string; amount: number; payment_date: string; payment_method: string; upi_reference_number: string; period: string; notes: string };
 type FormState = {
@@ -43,6 +43,7 @@ async function readJson(response: Response) {
 
 export default function ManageFees() {
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [students, setStudents] = useState<Student[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [form, setForm] = useState<FormState>(freshForm);
@@ -57,6 +58,7 @@ export default function ManageFees() {
   const [loadError, setLoadError] = useState("");
   const [receiptForPrint, setReceiptForPrint] = useState<FeeReceipt | null>(null);
   const [receiptForView, setReceiptForView] = useState<FeeReceipt | null>(null);
+  const [planItemId, setPlanItemId] = useState("");
   const [deletingId, setDeletingId] = useState("");
 
   const loadData = async () => {
@@ -78,6 +80,33 @@ export default function ManageFees() {
   };
 
   useEffect(() => { void loadData(); }, []);
+
+  useEffect(() => {
+    const receiptId = searchParams.get("receipt");
+    if (!receiptId || loading) return;
+    const receipt = payments.find(payment => payment.id === receiptId);
+    if (receipt) {
+      setReceiptForPrint({ receipt_no: receipt.receipt_no, student_name: receipt.student_name, enrollment_no: receipt.enrollment_no || "", fee_category: receipt.fee_category, amount: Number(receipt.amount), payment_date: receipt.payment_date, payment_method: receipt.payment_method, upi_reference_number: receipt.upi_reference_number || "", period: receipt.period || "", notes: receipt.notes || "" });
+      const params = new URLSearchParams(searchParams); params.delete("receipt"); setSearchParams(params, { replace: true });
+    }
+  }, [searchParams, setSearchParams, payments, loading]);
+
+  useEffect(() => {
+    const planItem = searchParams.get("plan_item_id"), studentId = searchParams.get("student_id");
+    if (!planItem || !studentId || loading || !students.length) return;
+    let active = true;
+    fetch("/api/student-fee-plan?student_id=" + encodeURIComponent(studentId), { cache: "no-store" }).then(async response => {
+      const result = await response.json(); if (!response.ok) throw new Error(result.error || "Unable to load fee plan."); return result.data;
+    }).then(plan => {
+      if (!active) return;
+      const item = (plan?.items || []).find((entry: { id: string }) => entry.id === planItem);
+      if (!item || item.is_waived || item.remaining_amount <= 0) throw new Error("This fee plan item is already paid or waived.");
+      setForm({ student_id: studentId, fee_category: item.fee_category, amount: String(item.remaining_amount), payment_date: todayInput, payment_method: "Cash", upi_reference_number: "", period: item.period || "", notes: "" });
+      setPlanItemId(item.id); setEditingId(""); setActiveTab("collect");
+      setSearchParams(new URLSearchParams(), { replace: true });
+    }).catch(error => { if (active) toast({ title: "Could not open fee collection", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" }); });
+    return () => { active = false; };
+  }, [searchParams, setSearchParams, loading, students, toast]);
 
   useEffect(() => {
     if (!receiptForPrint) return;
@@ -108,11 +137,13 @@ export default function ManageFees() {
   const resetForm = () => {
     setForm(freshForm());
     setEditingId("");
+    setPlanItemId("");
     setStudentSearch("");
   };
 
   const editPayment = (payment: FeePayment) => {
     setEditingId(payment.id);
+    setPlanItemId(payment.fee_plan_item_id || "");
     setForm({
       student_id: payment.student_id || "", fee_category: payment.fee_category,
       amount: String(payment.amount), payment_date: payment.payment_date,
@@ -150,7 +181,7 @@ export default function ManageFees() {
       const response = await fetch(url, {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, fee_plan_item_id: planItemId || null }),
       });
       const result = await readJson(response);
       await loadData();
