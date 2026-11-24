@@ -31,7 +31,7 @@ export async function onRequest({ request, env }) {
       await ensureStudentFeePlan(env, student);
       const plan = await getStudentFeePlan(env, student, { ensure: false });
       const otherDeposits = await env.DB.prepare(
-        `SELECT p.id, p.receipt_no, p.amount, p.payment_date, p.payment_method, p.notes
+        `SELECT p.id, p.receipt_no, p.amount, p.payment_date, p.payment_method, p.mr_number, p.notes
          FROM fee_payments p
          WHERE p.student_id = ? AND p.fee_category = 'Other' AND p.fee_plan_item_id IS NULL
            AND NOT EXISTS (SELECT 1 FROM student_fee_payment_allocations a WHERE a.payment_id = p.id)
@@ -91,6 +91,9 @@ export async function onRequest({ request, env }) {
   } catch (error) {
     if (error instanceof SyntaxError) return json({ error: "Invalid request" }, 400);
     const message = String(error?.message || "");
+    if (/no such column: mr_number/i.test(message)) {
+      return json({ error: "Apply migrations/0019_fee_payment_mr_number.sql in D1 to use manual receipt numbers." }, 503);
+    }
     if (/no such table: student_fee_payment_allocations/i.test(message)) {
       return json({ error: "Advance payment database update is required. Apply migrations/0017_fee_payment_allocations.sql in D1." }, 503);
     }

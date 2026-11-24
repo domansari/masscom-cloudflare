@@ -19,12 +19,13 @@ function normalize(data) {
   const period = typeof data.period === "string" ? data.period.trim() : "";
   const notes = typeof data.notes === "string" ? data.notes.trim() : "";
   const upiReference = typeof data.upi_reference_number === "string" ? data.upi_reference_number.trim() : "";
+  const mrNumber = typeof data.mr_number === "string" ? data.mr_number.trim() : "";
   if (!categories.includes(category) || !methods.includes(method) ||
       !Number.isFinite(amount) || amount <= 0 || amount > 100000000 ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(date) || period.length > 40 || notes.length > 500 || upiReference.length > 120 || (method === "UPI" && !upiReference)) return null;
+      !/^\d{4}-\d{2}-\d{2}$/.test(date) || period.length > 40 || notes.length > 500 || upiReference.length > 120 || mrNumber.length > 100 || (method === "UPI" && !upiReference)) return null;
   const parsed = new Date(date + "T00:00:00.000Z");
   if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) return null;
-  return { fee_category: category, payment_method: method, upi_reference_number: method === "UPI" ? upiReference : null, amount, payment_date: date, period: period || null, notes: notes || null };
+  return { fee_category: category, payment_method: method, upi_reference_number: method === "UPI" ? upiReference : null, mr_number: mrNumber || null, amount, payment_date: date, period: period || null, notes: notes || null };
 }
 
 export async function onRequest({ request, env }) {
@@ -149,11 +150,11 @@ export async function onRequest({ request, env }) {
       const insertPayment = env.DB.prepare(
         `INSERT INTO fee_payments
          (id, receipt_no, student_id, student_name, enrollment_no, fee_category, amount, payment_date,
-          payment_method, upi_reference_number, fee_plan_item_id, period, notes, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          payment_method, upi_reference_number, mr_number, fee_plan_item_id, period, notes, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(id, receiptNo, student.id, student.student_name, buildEnrollmentNo(student), payment.fee_category,
         payment.amount, payment.payment_date, payment.payment_method, payment.upi_reference_number,
-        planItemId || null, payment.period, payment.notes, account.adminId);
+        payment.mr_number, planItemId || null, payment.period, payment.notes, account.adminId);
       if (allocations.length) {
         const statements = [insertPayment, ...allocations.map(allocation => env.DB.prepare(
           "INSERT INTO student_fee_payment_allocations (id, payment_id, fee_plan_item_id, amount) VALUES (?, ?, ?, ?)"
@@ -217,9 +218,9 @@ export async function onRequest({ request, env }) {
       }).filter(allocation => allocation.amount > 0.001);
       const update = env.DB.prepare(
         `UPDATE fee_payments SET fee_category = ?, amount = ?, payment_date = ?,
-         payment_method = ?, upi_reference_number = ?, period = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+         payment_method = ?, upi_reference_number = ?, mr_number = ?, period = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
       ).bind(payment.fee_category, payment.amount, payment.payment_date, payment.payment_method,
-        payment.upi_reference_number, payment.period, payment.notes, id);
+        payment.upi_reference_number, payment.mr_number, payment.period, payment.notes, id);
       const statements = [update, ...payable.map(allocation => env.DB.prepare(
         "INSERT INTO student_fee_payment_allocations (id, payment_id, fee_plan_item_id, amount) VALUES (?, ?, ?, ?)"
       ).bind(crypto.randomUUID(), id, allocation.item.id, allocation.amount))];
@@ -264,14 +265,15 @@ export async function onRequest({ request, env }) {
 
     await env.DB.prepare(
       `UPDATE fee_payments SET fee_category = ?, amount = ?, payment_date = ?,
-       payment_method = ?, upi_reference_number = ?, period = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+       payment_method = ?, upi_reference_number = ?, mr_number = ?, period = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).bind(payment.fee_category, payment.amount, payment.payment_date, payment.payment_method,
-      payment.upi_reference_number, payment.period, payment.notes, id).run();
+      payment.upi_reference_number, payment.mr_number, payment.period, payment.notes, id).run();
     const updated = await env.DB.prepare("SELECT id FROM fee_payments WHERE id = ?").bind(id).first();
     return updated ? json({ success: true, id }) : json({ error: "Fee record not found" }, 404);
   } catch (error) {
     if (error instanceof SyntaxError) return json({ error: "Invalid request" }, 400);
     const message = String(error?.message || "");
+    if (/no such column: mr_number/i.test(message)) return json({ error: "MR number database update is required. Apply migrations/0019_fee_payment_mr_number.sql in D1, then try again." }, 503);
     if (/no such table: fee_payments/i.test(message)) return json({ error: "Fee database update is required. Apply the fee payment migration in D1, then try again." }, 503);
     if (/no such table: student_fee_payment_allocations/i.test(message)) return json({ error: "Advance payment database update is required. Apply migrations/0017_fee_payment_allocations.sql in D1, then try again." }, 503);
     if (/no such table: student_fee_plan_items|no such column: fee_plan_item_id/i.test(message)) return json({ error: "Fee plan database update is required. Apply migrations/0016_fee_plan.sql in D1, then try again." }, 503);

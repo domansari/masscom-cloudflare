@@ -19,12 +19,12 @@ type FeePlanMonth = { id: string; fee_category: string; description: string; per
 type FeePayment = {
   id: string; receipt_no: string; student_id: string | null; student_name: string;
   enrollment_no: string | null; fee_category: string; amount: number; payment_date: string;
-  payment_method: string; upi_reference_number: string | null; fee_plan_item_id: string | null; period: string | null; notes: string | null;
+  payment_method: string; upi_reference_number: string | null; mr_number: string | null; fee_plan_item_id: string | null; period: string | null; notes: string | null;
 };
-type FeeReceipt = { receipt_no: string; student_name: string; enrollment_no: string; fee_category: string; amount: number; payment_date: string; payment_method: string; upi_reference_number: string; period: string; notes: string };
+type FeeReceipt = { receipt_no: string; student_name: string; enrollment_no: string; fee_category: string; amount: number; payment_date: string; payment_method: string; upi_reference_number: string; mr_number: string; period: string; notes: string };
 type FormState = {
   student_id: string; fee_category: string; amount: string; payment_date: string;
-  payment_method: string; upi_reference_number: string; period: string; notes: string;
+  payment_method: string; upi_reference_number: string; mr_number: string; period: string; notes: string;
 };
 const categories = ["Monthly Fee", "Admission Fee", "Reexam Fee", "Certificate Issue Fee", "Other"];
 const methods = ["Cash", "UPI"];
@@ -32,7 +32,7 @@ const today = new Date();
 const todayInput = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
 const freshForm = (): FormState => ({
   student_id: "", fee_category: "Monthly Fee", amount: "", payment_date: todayInput,
-  payment_method: "Cash", upi_reference_number: "", period: "", notes: "",
+  payment_method: "Cash", upi_reference_number: "", mr_number: "", period: "", notes: "",
 });
 const currency = (value: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(value);
 
@@ -124,7 +124,7 @@ export default function ManageFees() {
     if (!receiptId || loading) return;
     const receipt = payments.find(payment => payment.id === receiptId);
     if (receipt) {
-      setReceiptForPrint({ receipt_no: receipt.receipt_no, student_name: receipt.student_name, enrollment_no: receipt.enrollment_no || "", fee_category: receipt.fee_category, amount: Number(receipt.amount), payment_date: receipt.payment_date, payment_method: receipt.payment_method, upi_reference_number: receipt.upi_reference_number || "", period: receipt.period || "", notes: receipt.notes || "" });
+      setReceiptForPrint({ receipt_no: receipt.receipt_no, student_name: receipt.student_name, enrollment_no: receipt.enrollment_no || "", fee_category: receipt.fee_category, amount: Number(receipt.amount), payment_date: receipt.payment_date, payment_method: receipt.payment_method, upi_reference_number: receipt.upi_reference_number || "", mr_number: receipt.mr_number || "", period: receipt.period || "", notes: receipt.notes || "" });
       const params = new URLSearchParams(searchParams); params.delete("receipt"); setSearchParams(params, { replace: true });
     }
   }, [searchParams, setSearchParams, payments, loading]);
@@ -146,12 +146,12 @@ export default function ManageFees() {
         const categories = [...new Set(items.map(item => item.fee_category))];
         const period = items.length === 1 ? items[0].period || "" : "Multiple installments";
         const details = "Plan installments: " + items.map(item => [item.period || item.description, currency(item.remaining_amount)].join(" ")).join("; ");
-        setForm({ student_id: studentId, fee_category: categories.length === 1 ? categories[0] : "Other", amount: String(items.reduce((sum, item) => sum + item.remaining_amount, 0)), payment_date: todayInput, payment_method: "Cash", upi_reference_number: "", period, notes: details.slice(0, 490) });
+        setForm({ student_id: studentId, fee_category: categories.length === 1 ? categories[0] : "Other", amount: String(items.reduce((sum, item) => sum + item.remaining_amount, 0)), payment_date: todayInput, payment_method: "Cash", upi_reference_number: "", mr_number: "", period, notes: details.slice(0, 490) });
         setPlanItemId(""); setPlanItemIds(items.map(item => item.id)); setSelectedMonthIds(items.filter(item => item.fee_category === "Monthly Fee").map(item => item.id));
       } else {
         const item = (plan?.items || []).find((entry: { id: string }) => entry.id === singleItemId);
         if (!item || item.is_waived || item.remaining_amount <= 0) throw new Error("This fee plan item is already paid or waived.");
-        setForm({ student_id: studentId, fee_category: item.fee_category, amount: String(item.remaining_amount), payment_date: todayInput, payment_method: "Cash", upi_reference_number: "", period: item.period || "", notes: "" });
+        setForm({ student_id: studentId, fee_category: item.fee_category, amount: String(item.remaining_amount), payment_date: todayInput, payment_method: "Cash", upi_reference_number: "", mr_number: "", period: item.period || "", notes: "" });
         if (item.fee_category === "Monthly Fee") {
           setPlanItemId(""); setPlanItemIds([item.id]); setSelectedMonthIds([item.id]);
         } else {
@@ -183,7 +183,7 @@ export default function ManageFees() {
     const query = search.trim().toLowerCase();
     return payments.filter(payment => {
       const inDateRange = (!fromDate || payment.payment_date >= fromDate) && (!toDate || payment.payment_date <= toDate);
-      const matchesSearch = !query || [payment.receipt_no, payment.student_name, payment.enrollment_no, payment.fee_category, payment.payment_method, payment.upi_reference_number]
+      const matchesSearch = !query || [payment.receipt_no, payment.student_name, payment.enrollment_no, payment.fee_category, payment.payment_method, payment.upi_reference_number, payment.mr_number]
         .some(value => String(value || "").toLowerCase().includes(query));
       return inDateRange && matchesSearch;
     });
@@ -217,12 +217,12 @@ export default function ManageFees() {
     setForm({
       student_id: payment.student_id || "", fee_category: payment.fee_category,
       amount: String(payment.amount), payment_date: payment.payment_date,
-      payment_method: payment.payment_method, upi_reference_number: payment.upi_reference_number || "", period: payment.period || "", notes: payment.notes || "",
+      payment_method: payment.payment_method, upi_reference_number: payment.upi_reference_number || "", mr_number: payment.mr_number || "", period: payment.period || "", notes: payment.notes || "",
     });
     setActiveTab("collect");
   };
 
-  const receiptFromPayment = (payment: FeePayment): FeeReceipt => ({ receipt_no: payment.receipt_no, student_name: payment.student_name, enrollment_no: payment.enrollment_no || "", fee_category: payment.fee_category, amount: payment.amount, payment_date: payment.payment_date, payment_method: payment.payment_method, upi_reference_number: payment.upi_reference_number || "", period: payment.period || "", notes: payment.notes || "" });
+  const receiptFromPayment = (payment: FeePayment): FeeReceipt => ({ receipt_no: payment.receipt_no, student_name: payment.student_name, enrollment_no: payment.enrollment_no || "", fee_category: payment.fee_category, amount: payment.amount, payment_date: payment.payment_date, payment_method: payment.payment_method, upi_reference_number: payment.upi_reference_number || "", mr_number: payment.mr_number || "", period: payment.period || "", notes: payment.notes || "" });
 
   const deletePayment = async (payment: FeePayment) => {
     if (!window.confirm(`Delete receipt ${payment.receipt_no} for ${payment.student_name}?`)) return;
@@ -271,6 +271,7 @@ export default function ManageFees() {
             payment_date: form.payment_date,
             payment_method: form.payment_method,
             upi_reference_number: form.upi_reference_number,
+            mr_number: form.mr_number,
             period: form.period,
             notes: form.notes,
           });
@@ -293,7 +294,7 @@ export default function ManageFees() {
           <section className="fee-receipt-copy" key={copy}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid #222", paddingBottom: "4mm", marginBottom: "4mm" }}>
               <div><h1 style={{ margin: 0, fontSize: "17pt", fontWeight: 700 }}>Masscom Infotech Education</h1><p style={{ margin: "2mm 0 0", fontSize: "9pt" }}>FEE RECEIPT</p></div>
-              <div style={{ textAlign: "right", fontSize: "9pt" }}><strong>{copy}</strong><br />Receipt No: {receiptForPrint.receipt_no}</div>
+              <div style={{ textAlign: "right", fontSize: "9pt" }}><strong>{copy}</strong><br />Receipt No: {receiptForPrint.receipt_no}<br />MR No.: {receiptForPrint.mr_number || "—"}</div>
             </div>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10pt" }}>
               <tbody>
@@ -316,7 +317,7 @@ export default function ManageFees() {
       {receiptForView && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setReceiptForView(null); }}>
         <section role="dialog" aria-modal="true" aria-labelledby="receipt-view-title" className="w-full max-w-xl rounded-xl border border-white/20 bg-slate-900 p-6 text-white shadow-2xl">
           <div className="mb-5 flex items-start justify-between gap-4"><div><h2 id="receipt-view-title" className="text-xl font-bold">Fee Receipt</h2><p className="text-sm text-gray-300">{receiptForView.receipt_no}</p></div><Button type="button" variant="outline" size="icon" aria-label="Close receipt" onClick={() => setReceiptForView(null)}><X className="h-4 w-4" /></Button></div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm"><dt className="text-gray-300">Student</dt><dd>{receiptForView.student_name}</dd><dt className="text-gray-300">Enrollment No.</dt><dd>{receiptForView.enrollment_no || "—"}</dd><dt className="text-gray-300">Date</dt><dd>{formatIndianDate(receiptForView.payment_date)}</dd><dt className="text-gray-300">Fee Type</dt><dd>{receiptForView.fee_category}</dd><dt className="text-gray-300">Payment Method</dt><dd>{receiptForView.payment_method}</dd>{receiptForView.payment_method === "UPI" && <><dt className="text-gray-300">UPI Reference No.</dt><dd>{receiptForView.upi_reference_number || "—"}</dd></>}<dt className="text-gray-300">Period</dt><dd>{receiptForView.period || "—"}</dd><dt className="text-gray-300">Amount</dt><dd className="font-semibold">{currency(receiptForView.amount)}</dd><dt className="text-gray-300">Notes</dt><dd>{receiptForView.notes || "—"}</dd></dl>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm"><dt className="text-gray-300">Student</dt><dd>{receiptForView.student_name}</dd><dt className="text-gray-300">Enrollment No.</dt><dd>{receiptForView.enrollment_no || "—"}</dd><dt className="text-gray-300">Date</dt><dd>{formatIndianDate(receiptForView.payment_date)}</dd><dt className="text-gray-300">Fee Type</dt><dd>{receiptForView.fee_category}</dd><dt className="text-gray-300">MR No.</dt><dd>{receiptForView.mr_number || "—"}</dd><dt className="text-gray-300">Payment Method</dt><dd>{receiptForView.payment_method}</dd>{receiptForView.payment_method === "UPI" && <><dt className="text-gray-300">UPI Reference No.</dt><dd>{receiptForView.upi_reference_number || "—"}</dd></>}<dt className="text-gray-300">Period</dt><dd>{receiptForView.period || "—"}</dd><dt className="text-gray-300">Amount</dt><dd className="font-semibold">{currency(receiptForView.amount)}</dd><dt className="text-gray-300">Notes</dt><dd>{receiptForView.notes || "—"}</dd></dl>
           <div className="mt-6 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setReceiptForView(null)}>Close</Button><Button type="button" onClick={() => { setReceiptForPrint(receiptForView); setReceiptForView(null); }}><Printer className="mr-2 h-4 w-4" />Print Receipt</Button></div>
         </section>
       </div>}
@@ -404,6 +405,11 @@ export default function ManageFees() {
                     <Label htmlFor="fee-period">Month / Period</Label>
                     <Input id="fee-period" maxLength={40} placeholder="For example, November 2026" value={form.period} onChange={event => updateField("period", event.target.value)} className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
                   </div>}
+                  <div className="space-y-2">
+                    <Label htmlFor="fee-mr-number">Manual Receipt No. (MR No.)</Label>
+                    <Input id="fee-mr-number" maxLength={100} value={form.mr_number} onChange={event => updateField("mr_number", event.target.value)} placeholder="Enter the number from the manual receipt" className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
+                    <p className="text-xs text-gray-300">Optional reference for matching this payment to your handwritten receipt.</p>
+                  </div>
                   <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="fee-notes">Notes</Label>
                     <Input id="fee-notes" maxLength={500} value={form.notes} onChange={event => updateField("notes", event.target.value)} className="border-white/30 bg-white/10 text-white" />
@@ -435,9 +441,10 @@ export default function ManageFees() {
                 {loadError && <p role="alert" className="mb-4 rounded-md border border-red-300/30 bg-red-500/10 p-3 text-sm text-red-100">{loadError}</p>}
                 {loading ? <p className="py-8 text-center text-gray-200">Loading fee records…</p> : filteredPayments.length === 0 ? <p className="py-8 text-center text-gray-200">{payments.length ? "No matching fee records." : "No fee collections have been recorded yet."}</p> : (
                   <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-sm">
-                    <thead><tr className="border-b border-white/20 text-gray-200"><th className="px-3 py-3">Receipt</th><th className="px-3 py-3">Date</th><th className="px-3 py-3">Student</th><th className="px-3 py-3">Enrollment No.</th><th className="px-3 py-3">Type / Period</th><th className="px-3 py-3">Method</th><th className="px-3 py-3 text-right">Amount</th><th className="px-3 py-3">Actions</th></tr></thead>
+                    <thead><tr className="border-b border-white/20 text-gray-200"><th className="px-3 py-3">Receipt</th><th className="px-3 py-3">MR No.</th><th className="px-3 py-3">Date</th><th className="px-3 py-3">Student</th><th className="px-3 py-3">Enrollment No.</th><th className="px-3 py-3">Type / Period</th><th className="px-3 py-3">Method</th><th className="px-3 py-3 text-right">Amount</th><th className="px-3 py-3">Actions</th></tr></thead>
                     <tbody>{filteredPayments.map(payment => <tr key={payment.id} className="border-b border-white/10 text-white">
                       <td className="px-3 py-3 font-medium">{payment.receipt_no}</td>
+                      <td className="px-3 py-3">{payment.mr_number || "—"}</td>
                       <td className="px-3 py-3 whitespace-nowrap">{formatIndianDate(payment.payment_date)}</td>
                       <td className="px-3 py-3">{payment.student_name}</td>
                       <td className="px-3 py-3">{payment.enrollment_no || "—"}</td>

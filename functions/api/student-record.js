@@ -66,7 +66,7 @@ export async function onRequest({ request, env }) {
       ).bind(card.student_name).all(),
       getStudentFeePlan(env, card),
       env.DB.prepare(
-        `SELECT p.id, p.receipt_no, p.amount, p.payment_date, p.payment_method, p.notes
+        `SELECT p.id, p.receipt_no, p.amount, p.payment_date, p.payment_method, p.mr_number, p.notes
          FROM fee_payments p WHERE p.student_id = ? AND p.fee_category = 'Other' AND p.fee_plan_item_id IS NULL
            AND NOT EXISTS (SELECT 1 FROM student_fee_payment_allocations a WHERE a.payment_id = p.id)
          ORDER BY p.payment_date DESC, p.created_at DESC`
@@ -110,6 +110,9 @@ export async function onRequest({ request, env }) {
     }
     if (/no such table: student_documents/i.test(message)) {
       return json({ error: "Student photo database setup is required." }, 503);
+    }
+    if (/no such column: mr_number/i.test(message)) {
+      return json({ error: "Apply migrations/0019_fee_payment_mr_number.sql in D1 to show manual receipt numbers." }, 503);
     }
     if (/no such table: student_fee_payment_allocations/i.test(message)) {
       return json({ error: "Apply migrations/0017_fee_payment_allocations.sql in D1 to show the complete fee plan." }, 503);

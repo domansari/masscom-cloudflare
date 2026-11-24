@@ -32,9 +32,9 @@ type FeePlan = {
   upcoming_amount: number; outstanding_amount?: number;
   items: Array<{ id: string; description: string; period: string; due_date: string; amount: number; paid_amount: number;
     remaining_amount: number; is_waived: boolean; status: "paid" | "pending" | "upcoming" | "waived";
-    receipts: Array<{ receipt_no: string; payment_date: string }> }>;
+    receipts: Array<{ receipt_no: string; payment_date: string; mr_number?: string }> }>;
 };
-type OtherDeposit = { id: string; receipt_no: string; amount: number; payment_date: string; payment_method: string; notes?: string | null };
+type OtherDeposit = { id: string; receipt_no: string; amount: number; payment_date: string; payment_method: string; mr_number?: string | null; notes?: string | null };
 type RecordResponse = { data: { student: Student; registration_no: string; marksheets: Sheet[]; certificates: Certificate[]; fee_plan: FeePlan; other_deposits: OtherDeposit[] } };
 
 const money = (value?: number | null) => value == null ? "Not set" : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
@@ -121,7 +121,7 @@ export default function StudentCardView() {
             {feePlan.items.length ? feePlan.items.map(item => <div key={item.id} className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-white/15 bg-white/5 p-3 text-sm">
               <div className="min-w-0"><p className="font-semibold text-white">{item.description}{item.period ? " · " + item.period : ""}</p>
                 <p className="mt-1 text-gray-300">Due {formatIndianDate(item.due_date)} · {money(item.amount)}{item.paid_amount > 0 ? " · Paid " + money(item.paid_amount) : ""}{item.remaining_amount > 0 && item.paid_amount > 0 ? " · Balance " + money(item.remaining_amount) : ""}</p>
-                {item.receipts.map(receipt => <p key={receipt.receipt_no} className="mt-1 text-xs text-emerald-300">Receipt {receipt.receipt_no} · {formatIndianDate(receipt.payment_date)}</p>)}
+                {item.receipts.map(receipt => <p key={receipt.receipt_no} className="mt-1 text-xs text-emerald-300">Receipt {receipt.receipt_no}{receipt.mr_number ? " · MR " + receipt.mr_number : ""} · {formatIndianDate(receipt.payment_date)}</p>)}
               </div>
               <span className="inline-flex shrink-0 items-center gap-2 text-white"><span className={"h-2.5 w-2.5 rounded-full " + (item.status === "paid" ? "bg-emerald-400" : item.status === "pending" ? "bg-amber-300" : item.status === "upcoming" ? "bg-red-400" : "bg-gray-300")} />{item.status === "paid" ? "Paid" : item.status === "pending" ? "Pending" : item.status === "upcoming" ? "Upcoming" : "Waived"}</span>
             </div>) : <p className="text-sm text-gray-300">No fee plan items are available.</p>}
@@ -133,7 +133,7 @@ export default function StudentCardView() {
         <CardHeader><CardTitle className="text-white">Other Deposits</CardTitle><CardDescription className="text-gray-200">Additional charges and deposits, kept separate from the main fee plan.</CardDescription></CardHeader>
         <CardContent className="space-y-2">
           {otherDeposits.length ? otherDeposits.map(deposit => <div key={deposit.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/15 bg-white/5 p-3 text-sm">
-            <div><p className="font-semibold">{deposit.receipt_no}</p><p className="text-gray-300">{formatIndianDate(deposit.payment_date)} · {deposit.payment_method}</p>{deposit.notes && <p className="mt-1 text-xs text-gray-300">{deposit.notes}</p>}</div>
+            <div><p className="font-semibold">{deposit.receipt_no}</p><p className="text-gray-300">{formatIndianDate(deposit.payment_date)} · {deposit.payment_method}{deposit.mr_number ? " · MR " + deposit.mr_number : ""}</p>{deposit.notes && <p className="mt-1 text-xs text-gray-300">{deposit.notes}</p>}</div>
             <p className="font-semibold text-emerald-300">{money(deposit.amount)}</p>
           </div>) : <p className="text-sm text-gray-300">No other deposits recorded.</p>}
         </CardContent>
