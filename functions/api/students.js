@@ -85,15 +85,16 @@ export async function onRequest({ request, env }) {
     const isActive = data.is_active === 0 ? 0 : 1;
     const writeFields = [...fields, ...feeFields];
     const values = writeFields.map(field => student[field]);
+    const recordId = method === "POST" ? crypto.randomUUID() : id;
     const result = method === "POST"
       ? await env.DB.prepare(
         `INSERT INTO students (${["id", ...writeFields, "is_active", "created_by"].join(", ")}) VALUES (${Array(writeFields.length + 3).fill("?").join(", ")})`
-      ).bind(crypto.randomUUID(), ...values, isActive, account.adminId).run()
+      ).bind(recordId, ...values, isActive, account.adminId).run()
       : await env.DB.prepare(
         `UPDATE students SET ${writeFields.map(field => `${field} = ?`).join(", ")}, is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
       ).bind(...values, isActive, id).run();
     if (method === "PUT" && !result.meta.changes) return json({ error: "Student not found" }, 404);
-    return json({ success: true }, method === "POST" ? 201 : 200);
+    return json({ success: true, id: recordId }, method === "POST" ? 201 : 200);
   } catch (error) {
     if (error instanceof SyntaxError) return json({ error: "Invalid request" }, 400);
     const message = String(error?.message || "");

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { Archive, ArrowLeft, Pencil, Plus, RotateCcw, Search, Users, X } from "lucide-react";
+import { Archive, ArrowLeft, Download, FileText, Pencil, Plus, RotateCcw, Search, Trash2, Users, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,16 @@ type Student = {
 };
 
 type StudentForm = Omit<Student, "id" | "is_active">;
+type DocumentType = "photo" | "certificate10" | "certificate12" | "aadhaar_card" | "other";
+type StudentDocument = { document_type: DocumentType; file_name: string; content_type: string; file_size: number; created_at: string };
+const documentFields: { type: DocumentType; label: string; accept: string }[] = [
+  { type: "photo", label: "Student Photo", accept: "image/jpeg,image/png,image/webp" },
+  { type: "certificate10", label: "10th Certificate", accept: "image/jpeg,image/png,image/webp,application/pdf" },
+  { type: "certificate12", label: "12th Certificate", accept: "image/jpeg,image/png,image/webp,application/pdf" },
+  { type: "aadhaar_card", label: "Aadhaar Card", accept: "image/jpeg,image/png,image/webp,application/pdf" },
+  { type: "other", label: "Other Document", accept: "image/jpeg,image/png,image/webp,application/pdf" },
+];
+const emptyDocumentFiles = (): Record<DocumentType, File | null> => ({ photo: null, certificate10: null, certificate12: null, aadhaar_card: null, other: null });
 const today = new Date();
 const dateInput = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 const academicStartYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
@@ -39,6 +49,18 @@ async function request(method: string, id?: string, body?: object) {
   return data;
 }
 
+async function requestDocuments(studentId: string, method = "GET", type?: DocumentType, file?: File) {
+  const params = new URLSearchParams({ student_id: studentId });
+  if (type) params.set("type", type);
+  const headers: HeadersInit = {};
+  const body = file ? new FormData() : undefined;
+  if (file) body?.append("file", file);
+  const response = await fetch(`/api/students/files?${params}`, { method, headers, body });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Unable to complete the document request.");
+  return data;
+}
+
 const display = (value: string | number | null) => value == null || value === "" ? "—" : String(value);
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -48,6 +70,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export default function ManageStudents() {
   const { toast } = useToast();
   const [students, setStudents] = useState<Student[]>([]);
+  const [documents, setDocuments] = useState<StudentDocument[]>([]);
+  const [documentFiles, setDocumentFiles] = useState<Record<DocumentType, File | null>>(emptyDocumentFiles);
   const [form, setForm] = useState<StudentForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -71,16 +95,35 @@ export default function ManageStudents() {
   }, [students, search, includeArchived]);
 
   const updateField = (field: keyof StudentForm, value: string) => setForm(current => ({ ...current, [field]: value }));
-  const resetForm = () => { setForm(emptyForm); setEditingId(null); };
+  const loadDocuments = async (studentId: string) => {
+    const result = await requestDocuments(studentId);
+    setDocuments(result.data || []);
+  };
+  const resetForm = () => { setForm(emptyForm); setEditingId(null); setDocuments([]); setDocumentFiles(emptyDocumentFiles()); };
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving) return;
     setSaving(true);
     try {
       const studentName = [form.first_name, form.last_name].filter(Boolean).join(" ").trim();
-      await request(editingId ? "PUT" : "POST", editingId || undefined, { ...form, student_name: studentName, is_active: 1 });
-      toast({ title: editingId ? "Student record updated" : "Student added" });
-      resetForm(); await loadStudents();
+      const result = await request(editingId ? "PUT" : "POST", editingId || undefined, { ...form, student_name: studentName, is_active: 1 });
+      const studentId = editingId || result.id;
+      const failedUploads: string[] = [];
+      for (const item of documentFields) {
+        const file = documentFiles[item.type];
+        if (!file) continue;
+        try { await requestDocuments(studentId, "POST", item.type, file); }
+        catch (cause) { failedUploads.push(`${item.label}: ${cause instanceof Error ? cause.message : "upload failed"}`); }
+      }
+      await loadStudents();
+      if (failedUploads.length) {
+        setEditingId(studentId);
+        try { await loadDocuments(studentId); } catch { /* preserve the saved student form so its uploads can be retried */ }
+        toast({ title: "Student saved; some files were not uploaded", description: failedUploads.join(" · "), variant: "destructive" });
+      } else {
+        toast({ title: editingId ? "Student record updated" : "Student added" });
+        resetForm();
+      }
     } catch (cause) {
       toast({ title: "Could not save student", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" });
     } finally { setSaving(false); }
@@ -92,6 +135,8 @@ export default function ManageStudents() {
     setForm({ ...emptyForm, ...student, first_name: student.first_name || oldName.shift() || "", last_name: student.last_name || oldName.join(" "),
       one_time_fee: student.one_time_fee ?? null, monthly_fee: student.monthly_fee ?? null,
       admission_date: student.admission_date || "", date_of_birth: student.date_of_birth || "" });
+    setDocumentFiles(emptyDocumentFiles());
+    void loadDocuments(student.id).catch(cause => toast({ title: "Could not load student documents", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" }));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -142,7 +187,22 @@ export default function ManageStudents() {
         {field("referred_by", "Referred By (Enrollment No.)", false, "text", "Enrollment number of the student who referred them.")}
       </Section>
 
-      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Photo and certificate uploads are not enabled yet. They need a private Cloudflare R2 file bucket before uploaded documents can be stored safely.</div>
+      <section className="space-y-4"><h3 className="border-b pb-2 text-lg font-semibold">Photo & Documents</h3>
+        <p className="text-sm text-slate-600">Private files are limited to 5 MB each. Photos accept JPG, PNG, or WebP. Documents also accept PDF.</p>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{documentFields.map(item => {
+          const current = documents.find(document => document.document_type === item.type);
+          return <div className="space-y-2 rounded-md border p-3" key={item.type}>
+            <Label htmlFor={`file-${item.type}`}>{item.label}</Label>
+            {current && editingId && <div className="flex items-center justify-between gap-2 text-xs text-slate-600">
+              <span className="flex min-w-0 items-center gap-1 truncate"><FileText className="h-3.5 w-3.5 shrink-0" />{current.file_name}</span>
+              <div className="flex shrink-0 gap-1"><a className="inline-flex items-center rounded border px-2 py-1 hover:bg-slate-50" href={`/api/students/files?student_id=${encodeURIComponent(editingId)}&type=${item.type}`} aria-label={`Download ${item.label}`}><Download className="h-3.5 w-3.5" /></a>
+                <Button type="button" size="sm" variant="outline" aria-label={`Delete ${item.label}`} onClick={async () => { try { await requestDocuments(editingId, "DELETE", item.type); await loadDocuments(editingId); toast({ title: `${item.label} deleted` }); } catch (cause) { toast({ title: "Could not delete document", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" }); } }}><Trash2 className="h-3.5 w-3.5" /></Button></div>
+            </div>}
+            <Input id={`file-${item.type}`} type="file" accept={item.accept} onChange={event => setDocumentFiles(currentFiles => ({ ...currentFiles, [item.type]: event.target.files?.[0] || null }))} />
+            {documentFiles[item.type] && <p className="truncate text-xs text-slate-500">Selected: {documentFiles[item.type]?.name}</p>}
+          </div>;
+        })}</div>
+      </section>
       <div className="space-y-2"><Label htmlFor="notes">Notes</Label><Textarea id="notes" value={form.notes || ""} onChange={event => updateField("notes", event.target.value)} rows={2} /></div>
       <div className="flex flex-wrap gap-2"><Button type="submit" disabled={saving}><Plus className="mr-2 h-4 w-4" />{saving ? "Saving…" : editingId ? "Save Changes" : "Add Student"}</Button>
         {editingId && <Button type="button" variant="outline" onClick={resetForm}><X className="mr-2 h-4 w-4" />Cancel Edit</Button>}

@@ -87,7 +87,9 @@ Run `node --test tests/certificate-roles.test.mjs` with Node.js 24 to exercise t
 
 Before publishing the student register, apply [migration 0008](migrations/0008_students.sql) to the production D1 database bound as `DB` (and to any preview database). It creates a separate student register; existing certificates and mark sheets remain unchanged. The `/students` page and `/api/students` endpoints require an administrator session. Archiving keeps the student record and can be reversed from the archived records view.
 
-For the expanded enrollment form, apply [migration 0009](migrations/0009_student_enrollment_fields.sql) to the same D1 database before publishing the updated Pages code. It adds family, gender/category, session, fee, referral, and Aadhaar-last-four fields and backfills the first name from existing student names. Photo and certificate uploads are not enabled until a private R2 bucket and authenticated file endpoints are configured.
+For the expanded enrollment form, apply [migration 0009](migrations/0009_student_enrollment_fields.sql) to the same D1 database before publishing the updated Pages code. It adds family, gender/category, session, fee, referral, and Aadhaar-last-four fields and backfills the first name from existing student names.
+
+For private student file uploads, create an R2 bucket named `masscom-student-files` and leave public access/custom domains disabled. In the Pages project settings, add an R2 bucket binding named `STUDENT_FILES` pointing to that bucket for production (and preview if used). Apply [migration 0010](migrations/0010_student_documents.sql) to the same D1 database before publishing the file-upload code. The `/api/students/files` endpoint requires an administrator session, accepts files up to 5 MB, validates image/PDF signatures, and returns downloads as private attachments.
 
 ## Provision a confirmed verifier
 
