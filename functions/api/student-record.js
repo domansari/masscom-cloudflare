@@ -18,7 +18,7 @@ export async function onRequest({ request, env }) {
       `SELECT c.student_id, c.registration_no, s.id, s.student_name, s.first_name, s.last_name,
         s.father_name, s.mother_name, s.gender, s.category, s.roll_no, s.batch_code, s.section_batch,
         s.course_name, s.session_year, s.batch_timing, s.admission_date, s.date_of_birth,
-        s.phone, s.email, s.address, s.aadhaar_last4, s.notes, s.is_active
+        s.phone, s.email, s.address, s.aadhaar_last4, s.notes, s.one_time_fee, s.monthly_fee, s.course_duration_months, s.waive_last_two_months, s.is_active
        FROM student_id_cards c JOIN students s ON s.id = c.student_id
        WHERE lower(trim(c.registration_no)) = lower(trim(?)) OR lower(trim(s.roll_no)) = lower(trim(?))
        ORDER BY CASE WHEN lower(trim(c.registration_no)) = lower(trim(?)) THEN 0 ELSE 1 END LIMIT 1`
