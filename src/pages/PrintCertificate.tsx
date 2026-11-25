@@ -11,6 +11,7 @@ import { formatIndianDate } from "@/lib/date-format";
 interface Certificate {
   id: string;
   certificate_id: string;
+  photo_url?: string | null;
   student_name: string;
   father_name: string;
   course_name: string;
@@ -89,6 +90,7 @@ function CertificatePdf({ certificate }: { certificate: Certificate }) {
     grade: certificate.grade || "",
     studentCoordinator: certificate.student_coordinator || "",
     certificateId: certificate.certificate_id,
+    photoUrl: certificate.photo_url,
     rollNo: certificate.roll_no || "",
   };
 

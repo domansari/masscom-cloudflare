@@ -1,3 +1,4 @@
+import { certificateArtwork } from "@/lib/certificate-artwork";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
@@ -15,11 +16,7 @@ export async function createCertificatePDF(certificateElement: HTMLElement) {
     position: "fixed", left: "-10000px", top: "0",
     width: `${captureWidth}px`, height: `${a4CaptureHeight}px`,
     overflow: "hidden", backgroundColor: "white",
-    backgroundImage: "url('/lovable-uploads/7ab347ae-d0be-4f64-ae7e-c4bfd0378ac4.png')",
-    // Trim the source image's plain white perimeter using its painted bounds.
-    backgroundSize: `${1348 / 1335 * 100}% ${1920 / 1891 * 100}%`,
-    backgroundPosition: `${9 / 13 * 100}% ${23 / 29 * 100}%`,
-    backgroundRepeat: "no-repeat",
+    ...certificateArtwork,
   });
 
   const copy = certificate.cloneNode(true) as HTMLElement;

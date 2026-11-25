@@ -1,4 +1,5 @@
 
+import { certificateArtwork } from "@/lib/certificate-artwork";
 import { CertificatePreviewProps } from "@/types/certificate";
 import CertificateHeader from "./certificate/CertificateHeader";
 import CertificateBody from "./certificate/CertificateBody";
@@ -54,10 +55,7 @@ const CertificatePreview = ({ data }: CertificatePreviewProps) => {
           padding: '0',
           margin: '0',
           fontFamily: 'Times, serif',
-          backgroundImage: `url('/lovable-uploads/7ab347ae-d0be-4f64-ae7e-c4bfd0378ac4.png')`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
+          ...certificateArtwork,
           boxSizing: 'border-box'
         }}
       >

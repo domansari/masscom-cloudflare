@@ -1,4 +1,4 @@
-
+import { certificatePhotoUrl } from "../_certificate-photo.js";
 import { examCourseCode, examCourseNames, marksheetResult, passingMark, validExamMarks } from "../_exam-courses.js";
 import { requireCertificateUser, sameOrigin } from "../_admin.js";
 import { hasUnpaidDues } from "../_student-fee-plan.js";
@@ -13,7 +13,10 @@ export async function onRequestGet({ request, env }) {
     ).all();
 
     return Response.json(
-      { data: result.results || [] },
+      { data: (result.results || []).map(certificate => ({
+        ...certificate,
+        photo_url: certificatePhotoUrl(certificate.qr_code_data, auth.role),
+      })) },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch {
@@ -151,6 +154,14 @@ export async function onRequestPost({ request, env }) {
     if (!certificateFee) return Response.json({ error: "Activate and pay the ₹250 Certificate Issue Fee before issuing the certificate." }, { status: 409 });
     if (dues.blocked) return Response.json({ error: dues.reason, fee_plan: dues.plan }, { status: 409 });
 
+    const photo = await env.DB.prepare(
+      "SELECT 1 AS available FROM student_documents WHERE student_id = ? AND document_type = 'photo'"
+    ).bind(enrolledStudent.id).first();
+    delete qr.certificatePhotoStudentId;
+    if (photo) qr.certificatePhotoStudentId = enrolledStudent.id;
+    values.qr_code_data = JSON.stringify(qr);
+    const photo_url = certificatePhotoUrl(values.qr_code_data, auth.role);
+
     const id = crypto.randomUUID();
     const columns = ["id", ...fields, "created_by"];
     const placeholders = columns.map(() => "?").join(", ");
@@ -193,7 +204,7 @@ export async function onRequestPost({ request, env }) {
         ).bind(id, markSheetId, id),
       ]);
       return created.meta.changes
-        ? Response.json({ success: true, id }, { status: 201 })
+        ? Response.json({ success: true, id, photo_url }, { status: 201 })
         : Response.json({ error: "A matching certificate already exists or the mark sheet changed. Refresh and link an existing certificate if available." }, { status: 409 });
     }
 
@@ -202,7 +213,7 @@ export async function onRequestPost({ request, env }) {
        VALUES (${placeholders})`
     ).bind(id, ...fields.map(field => values[field]), auth.id).run();
 
-    return Response.json({ success: true, id }, { status: 201 });
+    return Response.json({ success: true, id, photo_url }, { status: 201 });
   } catch (error) {
     if (String(error).includes("UNIQUE constraint failed")) {
       return Response.json({ error: "This certificate ID or marksheet Enrollment No. already exists." }, { status: 409 });

@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, FileText } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import WorkspaceTabs from "@/components/WorkspaceTabs";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import QRCodeGenerator from "@/components/QRCodeGenerator";
 import CertificatePreview from "@/components/CertificatePreview";
@@ -49,7 +48,7 @@ const GenerateCertificate = () => {
       const student = (result.data || []).find((item: { id:string }) => item.id === studentId);
       if (!student) throw new Error("Student not found.");
       setFormData(current => ({ ...current, studentName: student.student_name || "", fatherName: student.father_name || "", courseName: student.course_name || "", rollNo: student.roll_no || "" }));
-      setBatchNumber(student.batch_code || student.section_batch || "");
+      setBatchNumber(student.section_batch || student.batch_code || "");
     }).catch((error: Error) => { if (!controller.signal.aborted) setSheetError(error.message); });
     return () => controller.abort();
   }, [studentId, markSheetId]);
@@ -205,18 +204,17 @@ const GenerateCertificate = () => {
         throw new Error(result.error || "Failed to create certificate");
       }
 
-      if (markSheetId || createMarksheet) {
-        const saved = await response.json();
-        if (createMarksheet) {
-          navigate(`/marksheets?certificate=${encodeURIComponent(saved.id)}&edit=1`);
-          return;
-        }
-        setLinkedCertificateId(saved.id);
+      const saved = await response.json();
+      if (createMarksheet) {
+        navigate(`/marksheets?certificate=${encodeURIComponent(saved.id)}&edit=1`);
+        return;
       }
+      if (markSheetId) setLinkedCertificateId(saved.id);
 
       // Update form data with generated certificate ID
       setFormData(prevData => ({
         ...prevData,
+        photoUrl: saved.photo_url,
         certificateId: certificateId
       }));
 

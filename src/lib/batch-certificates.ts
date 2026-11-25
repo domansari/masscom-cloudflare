@@ -1,3 +1,4 @@
+import { certificateArtwork } from "@/lib/certificate-artwork";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { createElement } from "react";
@@ -11,6 +12,7 @@ import type { CertificateData } from "@/types/certificate";
 
 export type BatchCertificate = {
   certificate_id: string;
+  photo_url?: string | null;
   student_name: string;
   father_name?: string;
   course_name: string;
@@ -21,8 +23,6 @@ export type BatchCertificate = {
   roll_no?: string;
   batch_number?: string;
 };
-
-const background = "/lovable-uploads/7ab347ae-d0be-4f64-ae7e-c4bfd0378ac4.png";
 
 export async function downloadCertificateBatch(certificates: BatchCertificate[], batch: string) {
   if (!certificates.length) throw new Error("No certificates in the selected batch.");
@@ -42,12 +42,12 @@ export async function downloadCertificateBatch(certificates: BatchCertificate[],
         courseName: cert.course_name, duration: cert.duration || "",
         completionDate: cert.completion_date, grade: cert.grade || "",
         studentCoordinator: cert.student_coordinator || "",
-        certificateId: cert.certificate_id, rollNo: cert.roll_no
+        certificateId: cert.certificate_id, rollNo: cert.roll_no, photoUrl: cert.photo_url
       };
       const qr = await QRCode.toDataURL(`${window.location.origin}/verify?id=${encodeURIComponent(cert.certificate_id)}`, { width: 100, margin: 1 });
       flushSync(() => root.render(createElement("div", {
         style: { position: "relative", width: "794px", height: "1123px", overflow: "hidden",
-          backgroundImage: `url('${background}')`, backgroundSize: "100% 100%",
+          ...certificateArtwork,
           fontFamily: "Times, serif" }
       }, [
         createElement("img", { key: "qr", src: qr, alt: "Verification QR", style: {

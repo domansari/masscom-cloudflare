@@ -8,6 +8,7 @@ export interface CertificateData {
   grade: string;
   studentCoordinator: string;
   certificateId: string;
+  photoUrl?: string | null;
   rollNo?: string;
 }
 

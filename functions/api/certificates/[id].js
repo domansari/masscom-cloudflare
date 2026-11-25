@@ -1,3 +1,4 @@
+import { certificatePhotoUrl } from "../_certificate-photo.js";
 
 import { requireAdmin, requireCertificateUser, sameOrigin } from "../_admin.js";
 import { confirmDeletePassword } from "../_delete-password.js";
@@ -45,7 +46,7 @@ export async function onRequestGet({ request, env, params }) {
       return Response.json({ error: "Certificate not found" }, { status: 404 });
 
     return Response.json(
-      { data: certificate },
+      { data: { ...certificate, photo_url: certificatePhotoUrl(certificate.qr_code_data, auth.role) } },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch {

@@ -9,11 +9,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Search, ArrowUpDown, Download, ArrowLeft, Printer } from "lucide-react";
 import { Link } from "react-router-dom";
 import { formatIndianDate } from "@/lib/date-format";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
-import { generateCertificatePDF } from "@/utils/pdfGenerator";
-import CertificatePreview from "@/components/CertificatePreview";
+import { downloadCertificateBatch } from "@/lib/batch-certificates";
 
 interface Certificate {
   id: string;
@@ -57,161 +55,6 @@ const PrintCertificates = () => {
     }
   });
 
-  const createCertificateHTML = (certificate: Certificate) => {
-    return `
-      <div id="certificate-element" style="
-        width: 210mm;
-        height: 297mm;
-        position: relative;
-        font-family: Times, serif;
-        background-image: url('/lovable-uploads/7ab347ae-d0be-4f64-ae7e-c4bfd0378ac4.png');
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        page-break-after: always;
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      ">
-        <!-- QR Code -->
-        <div style="
-          position: absolute;
-          top: 15mm;
-          right: 15mm;
-          width: 20mm;
-          height: 20mm;
-          background: white;
-          border: 1px solid #ccc;
-          border-radius: 4px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 10;
-        ">
-          <canvas id="qr-${certificate.id}" style="width: 100%; height: 100%;"></canvas>
-        </div>
-
-        <!-- Certificate Content -->
-        <div style="
-          position: absolute;
-          top: 80mm;
-          left: 20mm;
-          right: 20mm;
-          text-align: center;
-        ">
-          <!-- Student Name -->
-          <div style="
-            font-size: 28px;
-            font-weight: bold;
-            color: #1a472a;
-            margin-bottom: 10mm;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-          ">
-            ${certificate.student_name}
-          </div>
-
-          <!-- Father Name -->
-          <div style="
-            font-size: 16px;
-            color: #333;
-            margin-bottom: 15mm;
-          ">
-            S/O ${certificate.father_name || 'N/A'}
-          </div>
-
-          <!-- Course completion text -->
-          <div style="
-            font-size: 18px;
-            color: #333;
-            margin-bottom: 5mm;
-            line-height: 1.4;
-          ">
-            has successfully completed the course of
-          </div>
-
-          <!-- Course Name -->
-          <div style="
-            font-size: 24px;
-            font-weight: bold;
-            color: #1a472a;
-            margin-bottom: 10mm;
-            text-transform: uppercase;
-          ">
-            ${certificate.course_name}
-          </div>
-
-          <!-- Duration and Grade -->
-          <div style="
-            font-size: 16px;
-            color: #333;
-            margin-bottom: 15mm;
-          ">
-            Duration: ${certificate.duration || 'N/A'} | Grade: ${certificate.grade || 'N/A'}
-          </div>
-
-          <!-- Roll Number -->
-          ${certificate.roll_no ? `
-          <div style="
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 10mm;
-          ">
-            Roll No: ${certificate.roll_no}
-          </div>
-          ` : ''}
-
-          <!-- Completion Date -->
-          <div style="
-            position: absolute;
-            bottom: 30mm;
-            left: 20mm;
-            font-size: 14px;
-            color: #333;
-          ">
-            Date: ${formatIndianDate(certificate.completion_date)}
-          </div>
-
-          <!-- Student Coordinator -->
-          <div style="
-            position: absolute;
-            bottom: 30mm;
-            right: 20mm;
-            font-size: 14px;
-            color: #333;
-          ">
-            ${certificate.student_coordinator || ''}
-          </div>
-
-          <!-- Certificate ID -->
-          <div style="
-            position: absolute;
-            bottom: 10mm;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 12px;
-            color: #666;
-            font-family: monospace;
-          ">
-            Certificate ID: ${certificate.certificate_id}
-          </div>
-        </div>
-      </div>
-    `;
-  };
-
-  const generateQRCode = async (certificateId: string, canvasId: string) => {
-    const QRCode = (await import('qrcode')).default;
-    const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
-    if (canvas) {
-      const verificationUrl = `${window.location.origin}/verify?id=${certificateId}`;
-      await QRCode.toCanvas(canvas, verificationUrl, {
-        width: 80,
-        margin: 1,
-      });
-    }
-  };
-
   const handlePrintSelected = async () => {
     if (selectedCertificates.size === 0) {
       toast({
@@ -226,32 +69,8 @@ const PrintCertificates = () => {
     const selectedCerts = certificates.filter(cert => selectedCertificates.has(cert.id));
     
     try {
-      const container = document.createElement('div');
-      container.style.position = 'fixed';
-      container.style.left = '-9999px';
-      container.style.top = '0';
-      
-      for (const certificate of selectedCerts) {
-        const certDiv = document.createElement('div');
-        certDiv.innerHTML = createCertificateHTML(certificate);
-        container.appendChild(certDiv);
-      }
-      
-      document.body.appendChild(container);
-      
-      // Generate QR codes for all certificates
-      for (const certificate of selectedCerts) {
-        await generateQRCode(certificate.certificate_id, `qr-${certificate.id}`);
-      }
-      
-      // Wait a bit for QR codes to render
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const filename = `Selected_Certificates_${new Date().getTime()}`;
-      await generateCertificatePDF(container, filename);
-      
-      document.body.removeChild(container);
-      
+      await downloadCertificateBatch(selectedCerts, "Selected");
+
       toast({
         title: "Print Complete",
         description: `Generated ${selectedCerts.length} selected certificates.`,
@@ -282,32 +101,8 @@ const PrintCertificates = () => {
     const batchCertificates = sortedAndFilteredCertificates.filter(cert => cert.batch_number === selectedBatch);
     
     try {
-      const container = document.createElement('div');
-      container.style.position = 'fixed';
-      container.style.left = '-9999px';
-      container.style.top = '0';
-      
-      for (const certificate of batchCertificates) {
-        const certDiv = document.createElement('div');
-        certDiv.innerHTML = createCertificateHTML(certificate);
-        container.appendChild(certDiv);
-      }
-      
-      document.body.appendChild(container);
-      
-      // Generate QR codes for all certificates
-      for (const certificate of batchCertificates) {
-        await generateQRCode(certificate.certificate_id, `qr-${certificate.id}`);
-      }
-      
-      // Wait a bit for QR codes to render
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const filename = `Batch_${selectedBatch}_${new Date().getTime()}`;
-      await generateCertificatePDF(container, filename);
-      
-      document.body.removeChild(container);
-      
+      await downloadCertificateBatch(batchCertificates, selectedBatch);
+
       toast({
         title: "Batch Print Complete",
         description: `Generated ${batchCertificates.length} certificates for batch ${selectedBatch}.`,
