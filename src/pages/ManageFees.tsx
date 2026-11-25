@@ -91,7 +91,7 @@ export default function ManageFees() {
       if (result?.success !== true) {
         throw new Error("The WhatsApp test endpoint did not confirm acceptance.");
       }
-      toast({ title: "Test accepted by Meta", description: "Check WhatsApp for the hello_world message." });
+      toast({ title: "Test accepted by Meta", description: "Check the recipient’s WhatsApp for the test message." });
     } catch (error) {
       toast({ title: "WhatsApp test failed", description: error instanceof Error ? error.message : "Could not connect to Meta.", variant: "destructive" });
     } finally {
