@@ -50,7 +50,7 @@ const CertificateHeader = ({ data }: CertificateHeaderProps) => {
       </div>
       {/* Subtitle */}
       <div className="text-center mb-5">
-        <p className="text-lg italic text-black-600">
+        <p className="relative -top-5 text-lg italic text-black-600">
           [An Autonomous Institution Registered Under The Public Trust Act.]
         </p>
       </div>
