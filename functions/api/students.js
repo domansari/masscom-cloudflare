@@ -2,7 +2,7 @@ import { confirmDeletePassword } from "./_delete-password.js";
 import { requireAdmin, sameOrigin } from "./_admin.js";
 import { certificateCourseOptions } from "./_exam-courses.js";
 import { batchTimings, buildEnrollmentNo, normalizeSessionYear } from "./_student-enrollment.js";
-import { buildBaseFeePlan, courseDurationMonths, feePlanStatements } from "./_student-fee-plan.js";
+import { buildBaseFeePlan, courseDurationMonths, feePlanStatements, feeWaiverLimit } from "./_student-fee-plan.js";
 
 const json = (data, status = 200) => Response.json(data, {
   status,
@@ -18,7 +18,7 @@ const limits = {
   aadhaar_last4: 4, session_year: 4, section_batch: 64, batch_timing: 32,
 };
 const feeFields = ["one_time_fee", "monthly_fee"];
-const planFields = ["course_duration_months", "waive_last_two_months"]
+const planFields = ["course_duration_months", "waive_last_two_months", "fee_waiver_amount"];
 
 function validDate(value) {
   if (!value) return true;
@@ -64,7 +64,6 @@ function normalize(data, existingCourse = "") {
   const duration = Number(data.course_duration_months || courseDurationMonths(student.course_name) || 0);
   if (!Number.isInteger(duration) || duration < 1 || duration > 120) return null;
   student.course_duration_months = duration;
-  student.waive_last_two_months = data.waive_last_two_months === true || data.waive_last_two_months === 1 || data.waive_last_two_months === "1" ? 1 : 0;
   if (student.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(student.email)) return null;
   return student;
 }
@@ -103,11 +102,32 @@ export async function onRequest({ request, env }) {
     const raw = await request.text();
     if (raw.length > 8192) return json({ error: "Request too large" }, 413);
     const data = JSON.parse(raw);
-    const existingCourse = method === "PUT"
-      ? (await env.DB.prepare("SELECT course_name FROM students WHERE id = ? LIMIT 1").bind(id).first())?.course_name || ""
-      : "";
-    const student = normalize(data, existingCourse);
+    const currentStudent = method === "PUT"
+      ? await env.DB.prepare("SELECT * FROM students WHERE id = ? LIMIT 1").bind(id).first()
+      : null;
+    if (method === "PUT" && !currentStudent) return json({ error: "Student not found" }, 404);
+    const student = normalize(data, currentStudent?.course_name || "");
     if (!student) return json({ error: "Enter a student name, valid dates, and check that each field is within its length limit." }, 400);
+    const baseChanged = currentStudent && ["admission_date", ...feeFields, "course_duration_months"]
+      .some(field => String(currentStudent[field] ?? "") !== String(student[field] ?? ""));
+    const legacyWaiver = currentStudent?.waive_last_two_months === 1 && currentStudent.fee_waiver_amount == null;
+    const previousWaiver = legacyWaiver
+      ? Math.round(Number(currentStudent.monthly_fee || 0) * Math.min(2, Number(currentStudent.course_duration_months || 0)) * 100) / 100
+      : Number(currentStudent?.fee_waiver_amount || 0);
+    const supplied = data.fee_waiver_amount;
+    const amount = supplied == null ? previousWaiver : supplied === "" ? 0 : Number(supplied);
+    const paise = Math.round(amount * 100);
+    if ((supplied != null && typeof supplied !== "number" && typeof supplied !== "string") ||
+        !Number.isFinite(amount) || amount < 0 || Math.abs(amount - paise / 100) > 0.000001) {
+      return json({ error: "Enter a valid fee waiver amount with up to two decimal places." }, 400);
+    }
+    const waiverChanged = paise !== Math.round(previousWaiver * 100);
+    const limit = feeWaiverLimit(student.one_time_fee, student.monthly_fee, student.course_duration_months);
+    if (paise / 100 > limit && (!currentStudent || waiverChanged || baseChanged)) {
+      return json({ error: "Fee waiver cannot exceed ₹" + limit.toLocaleString("en-IN") + " (30% of the original fee plan, up to the monthly fee total)." }, 400);
+    }
+    student.waive_last_two_months = legacyWaiver && !waiverChanged && !baseChanged ? 1 : 0;
+    student.fee_waiver_amount = student.waive_last_two_months ? null : paise / 100;
     const isActive = data.is_active === 0 ? 0 : 1;
     const writeFields = [...fields, ...feeFields, ...planFields];
     const values = writeFields.map(field => student[field]);
@@ -122,11 +142,9 @@ export async function onRequest({ request, env }) {
       const statements = [studentInsert, ...await feePlanStatements(env, plan, account.adminId)];
       [result] = await env.DB.batch(statements);
     } else {
-      const currentStudent = await env.DB.prepare("SELECT one_time_fee, monthly_fee, course_duration_months, waive_last_two_months FROM students WHERE id = ? LIMIT 1").bind(id).first();
-      if (!currentStudent) return json({ error: "Student not found" }, 404);
-      const planChanged = ["one_time_fee", "monthly_fee", "course_duration_months", "waive_last_two_months"].some(field => Number(currentStudent[field] || 0) !== Number(student[field] || 0));
+      const planChanged = baseChanged || waiverChanged;
       if (planChanged) {
-        const priorPayment = await env.DB.prepare("SELECT id FROM fee_payments WHERE student_id = ? AND fee_plan_item_id IS NOT NULL LIMIT 1").bind(id).first();
+        const priorPayment = await env.DB.prepare("SELECT p.id FROM fee_payments p WHERE p.student_id = ? AND (           p.fee_category IN ('Admission Fee', 'Monthly Fee') OR EXISTS (             SELECT 1 FROM student_fee_payment_allocations a             JOIN student_fee_plan_items i ON i.id = a.fee_plan_item_id             WHERE a.payment_id = p.id AND i.fee_category IN ('Admission Fee', 'Monthly Fee')           )         ) LIMIT 1").bind(id).first();
         if (priorPayment) return json({ error: "The fee plan cannot be changed after a payment is recorded. Update it before collecting a payment." }, 409);
       }
       const existingCard = await env.DB.prepare("SELECT id FROM student_id_cards WHERE student_id = ? LIMIT 1").bind(id).first();
@@ -137,7 +155,7 @@ export async function onRequest({ request, env }) {
       ).bind(...values, isActive, id);
       const statements = [updateStudent];
       if (planChanged) {
-        statements.push(env.DB.prepare("DELETE FROM student_fee_plan_items WHERE student_id = ? AND fee_category IN (?, ?, ?)").bind(id, "Admission Fee", "Monthly Fee", "Certificate Issue Fee"));
+        statements.push(env.DB.prepare("DELETE FROM student_fee_plan_items WHERE student_id = ? AND fee_category IN (?, ?)").bind(id, "Admission Fee", "Monthly Fee"));
         const plan = buildBaseFeePlan({ ...student, id });
         statements.push(...await feePlanStatements(env, plan, account.adminId));
       }

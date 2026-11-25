@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { certificateCourseOptions } from "../../functions/api/_exam-courses.js";
 import { batchTimings, buildEnrollmentNo } from "../../functions/api/_student-enrollment.js";
 import { courseDurationMonths } from "@/lib/course-duration";
+import { feeWaiverLimit } from "../../functions/api/_student-fee-plan.js";
 import { formatIndianDate, formatSessionYear } from "@/lib/date-format";
 import StudentPreview from "./StudentPreview";
 import StudentIdCard, { type StudentIdCardRecord } from "@/components/StudentIdCard";
@@ -23,7 +24,7 @@ type Student = {
   course_name: string | null; session_year: string | null; batch_timing: string | null;
   admission_date: string | null; date_of_birth: string | null; phone: string | null; email: string | null;
   address: string | null; notes: string | null; one_time_fee: number | null; monthly_fee: number | null;
-  course_duration_months: number | null; waive_last_two_months: number; is_active: number;
+  course_duration_months: number | null; waive_last_two_months: number; fee_waiver_amount?: number | null; is_active: number;
 };
 
 type StudentForm = Omit<Student, "id" | "is_active">;
@@ -43,7 +44,7 @@ const emptyForm: StudentForm = {
   student_name: "", first_name: "", last_name: "", father_name: "", mother_name: "", gender: "Male", category: "",
   aadhaar_last4: "", roll_no: "", batch_code: "", section_batch: "", course_name: "",
   session_year: currentSession, batch_timing: "", admission_date: dateInput, date_of_birth: "", phone: "", email: "", address: "", notes: "",
-  one_time_fee: null, monthly_fee: null, course_duration_months: null, waive_last_two_months: 0,
+  one_time_fee: null, monthly_fee: null, course_duration_months: null, waive_last_two_months: 0, fee_waiver_amount: null,
 };
 
 async function request(method: string, id?: string, body?: object) {
@@ -193,7 +194,9 @@ export default function ManageStudents() {
   const outstandingPlanItems = feePlan?.items.filter(item => !item.is_waived && item.remaining_amount > 0 && (admissionFeeOutstanding > 0.001 ? item.fee_category === "Admission Fee" : true)) || [];
   const planCollectionHref = (items: FeePlanItem[]) => "/fees?student_id=" + encodeURIComponent(feePlan?.student_id || "") + "&plan_item_ids=" + encodeURIComponent(items.map(item => item.id).join(","));
   useEffect(() => { setSelectedFeePlanItemIds([]); }, [feePlanStudentId]);
-  const estimatedPlanTotal = Number(form.one_time_fee || 0) + Number(form.monthly_fee || 0) * Math.max(0, Number(form.course_duration_months || 0) - (form.waive_last_two_months ? 2 : 0));
+  const waiverLimit = feeWaiverLimit(form.one_time_fee, form.monthly_fee, form.course_duration_months);
+  const estimatedPlanTotal = Math.max(0, Number(form.one_time_fee || 0) +
+    Number(form.monthly_fee || 0) * Number(form.course_duration_months || 0) - Number(form.fee_waiver_amount || 0));
   const activateReexamFee = async () => {
     if (!feePlanStudentId || reexamBusy) return;
     const amount = Number(reexamAmount);
@@ -277,6 +280,9 @@ export default function ManageStudents() {
       one_time_fee: student.one_time_fee ?? null, monthly_fee: student.monthly_fee ?? null,
       course_duration_months: student.course_duration_months ?? courseDurationMonths(student.course_name) ?? null,
       waive_last_two_months: student.waive_last_two_months ?? 0,
+      fee_waiver_amount: student.fee_waiver_amount ?? (student.waive_last_two_months
+        ? Math.round(Number(student.monthly_fee || 0) * Math.min(2, Number(student.course_duration_months || 0)) * 100) / 100
+        : null),
       admission_date: student.admission_date || "", date_of_birth: student.date_of_birth || "" });
     setDocumentFiles(emptyDocumentFiles());
     void loadDocuments(student.id).catch(cause => toast({ title: "Could not load student documents", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" }));
@@ -462,7 +468,13 @@ export default function ManageStudents() {
       <Section title="Fee Plan" id="student-fees">
         {field("one_time_fee", "Admission Fee (₹)", false, "number", "Due on the admission date.")}
         {field("monthly_fee", "Monthly Fee (₹)", false, "number", "This amount is multiplied by the course duration.")}
-        <div className="space-y-2"><Label className="flex items-center gap-2 text-white"><input type="checkbox" checked={Boolean(form.waive_last_two_months)} onChange={event => setForm(current => ({ ...current, waive_last_two_months: event.target.checked ? 1 : 0 }))} />Waive the final two monthly installments</Label><p className="text-xs text-gray-200">The waived months remain visible in the plan and are excluded from the total.</p></div>
+        <div className="space-y-2">
+          <Label htmlFor="fee_waiver_amount" className="text-white">Fee Waiver Amount (₹)</Label>
+          <Input id="fee_waiver_amount" type="number" min="0" step="0.01"
+            value={form.fee_waiver_amount ?? ""} onChange={event => updateField("fee_waiver_amount", event.target.value)}
+            className="border-white/30 bg-white/20 text-white" />
+          <p className="text-xs text-gray-200">Applied from the final month backward. Maximum {feeMoney(waiverLimit)} (30% of the original fee plan).</p>
+        </div>
         <div className="rounded-md border border-white/20 bg-white/5 p-3 text-sm text-white"><strong>Estimated plan total:</strong> ₹{estimatedPlanTotal.toLocaleString("en-IN")} <span className="text-gray-300">certificate fee and re-exam fee are added only when activated</span></div>
       </Section>
 

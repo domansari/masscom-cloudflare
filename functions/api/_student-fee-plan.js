@@ -38,6 +38,12 @@ function makeItem(studentId, category, amount, dueDate, period, waived = false, 
   };
 }
 
+export function feeWaiverLimit(oneTimeFee, monthlyFee, duration) {
+  const monthlyPaise = Math.round(Number(monthlyFee || 0) * 100) * Number(duration || 0);
+  const grossPaise = Math.round(Number(oneTimeFee || 0) * 100) + monthlyPaise;
+  return Math.min(monthlyPaise, Math.floor(grossPaise * 3 / 10)) / 100;
+}
+
 export function buildBaseFeePlan(student) {
   const items = [];
   const duration = Number(student.course_duration_months || courseDurationMonths(student.course_name) || 0);
@@ -49,11 +55,15 @@ export function buildBaseFeePlan(student) {
 
   const monthlyFee = Number(student.monthly_fee || 0);
   if (monthlyFee > 0) {
-    const waiveLastTwo = Number(student.waive_last_two_months) === 1;
+    const monthlyPaise = Math.round(monthlyFee * 100);
+    const legacyWaiver = Number(student.waive_last_two_months) === 1 ? monthlyFee * Math.min(2, duration) : 0;
+    const waiverPaise = Math.round(Number(student.fee_waiver_amount ?? legacyWaiver) * 100);
     for (let index = 0; index < duration; index++) {
       const dueDate = firstOfNextMonth(admissionDate, index);
-      const waived = waiveLastTwo && index >= duration - 2;
-      items.push(makeItem(student.id, "Monthly Fee", monthlyFee, dueDate, periodForDate(dueDate), waived, "Monthly Fee"));
+      const discount = Math.min(monthlyPaise, Math.max(0, waiverPaise - (duration - index - 1) * monthlyPaise));
+      const waived = discount === monthlyPaise && discount > 0;
+      const amount = discount > 0 && !waived ? (monthlyPaise - discount) / 100 : monthlyFee;
+      items.push(makeItem(student.id, "Monthly Fee", amount, dueDate, periodForDate(dueDate), waived, "Monthly Fee"));
     }
   }
   return items;
@@ -135,7 +145,7 @@ export async function getStudentFeePlan(env, student, { ensure = true } = {}) {
     };
   });
   const total = items.filter(item => !item.is_waived).reduce((sum, item) => sum + item.amount, 0);
-  const waivedAmount = items.filter(item => item.is_waived).reduce((sum, item) => sum + item.amount, 0);
+  const waivedAmount = student.fee_waiver_amount ?? items.filter(item => item.is_waived).reduce((sum, item) => sum + item.amount, 0);
   const paid = items.reduce((sum, item) => sum + item.paid_amount, 0);
   const pending = items.filter(item => item.status === "pending").reduce((sum, item) => sum + item.remaining_amount, 0);
   const upcoming = items.filter(item => item.status === "upcoming").reduce((sum, item) => sum + item.remaining_amount, 0);
