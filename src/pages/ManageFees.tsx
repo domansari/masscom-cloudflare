@@ -15,7 +15,7 @@ type Student = {
   section_batch: string | null; session_year: string | null; course_name: string | null;
   one_time_fee: number | null; monthly_fee: number | null; is_active: number;
 };
-type FeePlanMonth = { id: string; fee_category: string; description: string; period: string; due_date: string; amount: number; remaining_amount: number; is_waived: boolean; status: string };
+type FeePlanMonth = { id: string; fee_category: string; description: string; period: string; due_date: string; amount: number; remaining_amount: number; is_waived: boolean; status: string; receipts?: Array<{ id: string; amount: number }> };
 type FeePayment = {
   id: string; receipt_no: string; student_id: string | null; student_name: string;
   enrollment_no: string | null; fee_category: string; amount: number; payment_date: string;
@@ -49,6 +49,8 @@ export default function ManageFees() {
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [form, setForm] = useState<FormState>(freshForm);
   const [editingId, setEditingId] = useState("");
+  const [fromMonthId, setFromMonthId] = useState("");
+  const [toMonthId, setToMonthId] = useState("");
   const [activeTab, setActiveTab] = useState("collect");
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
@@ -189,6 +191,15 @@ export default function ManageFees() {
     });
   }, [payments, search, fromDate, toDate]);
 
+  const receiptMonths = editingId ? feePlanMonths.filter(item =>
+    item.fee_category === "Monthly Fee" && item.receipts?.some(receipt => receipt.id === editingId)
+  ) : [];
+  const fromMonth = receiptMonths.find(item => item.id === fromMonthId) || receiptMonths[0];
+  const amountToMove = fromMonth?.receipts?.find(receipt => receipt.id === editingId)?.amount ?? 0;
+  const replacementMonths = outstandingMonths.filter(item =>
+    !receiptMonths.some(month => month.id === item.id) && item.remaining_amount + 0.001 >= amountToMove
+  );
+
   const updateField = (key: keyof FormState, value: string) => setForm(current => ({ ...current, [key]: value }));
   const updateMonthSelection = (ids: string[]) => {
     const selected = outstandingMonths.filter(item => ids.includes(item.id));
@@ -210,6 +221,8 @@ export default function ManageFees() {
   };
 
   const editPayment = (payment: FeePayment) => {
+    setFromMonthId("");
+    setToMonthId("");
     setEditingId(payment.id);
     setPlanItemId(payment.fee_plan_item_id || "");
     setPlanItemIds([]);
@@ -220,6 +233,26 @@ export default function ManageFees() {
       payment_method: payment.payment_method, upi_reference_number: payment.upi_reference_number || "", mr_number: payment.mr_number || "", period: payment.period || "", notes: payment.notes || "",
     });
     setActiveTab("collect");
+  };
+
+  const changeFeeMonth = async () => {
+    if (!editingId || !fromMonth || !replacementMonths.some(item => item.id === toMonthId)) return;
+    setBusy(true);
+    try {
+      await readJson(await fetch("/api/fees?id=" + encodeURIComponent(editingId), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from_item_id: fromMonth.id, to_item_id: toMonthId }),
+      }));
+      resetForm();
+      setActiveTab("manage");
+      toast({ title: "Fee month updated" });
+      await loadData();
+    } catch (error) {
+      toast({ title: "Could not change fee month", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const receiptFromPayment = (payment: FeePayment): FeeReceipt => ({ receipt_no: payment.receipt_no, student_name: payment.student_name, enrollment_no: payment.enrollment_no || "", fee_category: payment.fee_category, amount: payment.amount, payment_date: payment.payment_date, payment_method: payment.payment_method, upi_reference_number: payment.upi_reference_number || "", mr_number: payment.mr_number || "", period: payment.period || "", notes: payment.notes || "" });
@@ -391,7 +424,27 @@ export default function ManageFees() {
                     <Label htmlFor="fee-upi-reference">UPI Reference Number *</Label>
                     <Input id="fee-upi-reference" required maxLength={120} value={form.upi_reference_number} onChange={event => updateField("upi_reference_number", event.target.value)} placeholder="Enter UPI transaction/reference number" className="border-white/30 bg-white/10 text-white placeholder:text-gray-300" />
                   </div>}
-                  {form.fee_category === "Monthly Fee" ? <div className="space-y-2 sm:col-span-2">
+                  {fromMonth && <fieldset disabled={busy} className="space-y-3 rounded-md border border-white/30 p-4 sm:col-span-2">
+                    <legend className="px-2 text-sm font-semibold">Change Fee Month</legend>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="fee-from-month">Current month</Label>
+                        <select id="fee-from-month" value={fromMonth.id} onChange={event => { setFromMonthId(event.target.value); setToMonthId(""); }} className="h-10 w-full rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white">
+                          {receiptMonths.map(item => <option key={item.id} value={item.id} className="text-slate-900">{item.period}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="fee-to-month">Correct month</Label>
+                        <select id="fee-to-month" value={toMonthId} onChange={event => setToMonthId(event.target.value)} className="h-10 w-full rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white">
+                          <option value="" className="text-slate-900">Select a month</option>
+                          {replacementMonths.map(item => <option key={item.id} value={item.id} className="text-slate-900">{item.period} · Balance {currency(item.remaining_amount)}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-200">{replacementMonths.length ? `Move ${currency(amountToMove)} from ${fromMonth.period} on this receipt.` : "No other month has enough unpaid balance for this amount."}</p>
+                    <Button type="button" disabled={busy || !toMonthId} onClick={() => void changeFeeMonth()}>Save Month Change</Button>
+                  </fieldset>}
+                  {form.fee_category === "Monthly Fee" && fromMonth ? null : form.fee_category === "Monthly Fee" ? <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="fee-months">Select Month(s) *</Label>
                     <div id="fee-months" role="group" aria-label="Select monthly fee installments" className="max-h-64 space-y-1 overflow-y-auto rounded-md border border-white/30 bg-white/5 p-2">
                       {outstandingMonths.map(item => <label key={item.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-white hover:bg-white/10">
