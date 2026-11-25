@@ -8,12 +8,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useSearchParams } from "react-router-dom";
 import { buildEnrollmentNo } from "../../functions/api/_student-enrollment.js";
+import { receiptPhone } from "@/lib/receipt-phone.js";
 import { formatIndianDate } from "@/lib/date-format";
 
 type Student = {
   id: string; student_name: string; roll_no: string | null; batch_code: string | null;
   section_batch: string | null; session_year: string | null; course_name: string | null;
-  one_time_fee: number | null; monthly_fee: number | null; is_active: number;
+  one_time_fee: number | null; monthly_fee: number | null; is_active: number; phone?: string | null;
 };
 type FeePlanMonth = { id: string; fee_category: string; description: string; period: string; due_date: string; amount: number; remaining_amount: number; is_waived: boolean; status: string; receipts?: Array<{ id: string; amount: number }> };
 type FeePayment = {
@@ -21,7 +22,7 @@ type FeePayment = {
   enrollment_no: string | null; fee_category: string; amount: number; payment_date: string;
   payment_method: string; upi_reference_number: string | null; mr_number: string | null; fee_plan_item_id: string | null; period: string | null; notes: string | null;
 };
-type FeeReceipt = { receipt_no: string; student_name: string; enrollment_no: string; fee_category: string; amount: number; payment_date: string; payment_method: string; upi_reference_number: string; mr_number: string; period: string; notes: string };
+type FeeReceipt = { id?: string; student_id?: string | null; receipt_no: string; student_name: string; enrollment_no: string; fee_category: string; amount: number; payment_date: string; payment_method: string; upi_reference_number: string; mr_number: string; period: string; notes: string };
 type FormState = {
   student_id: string; fee_category: string; amount: string; payment_date: string;
   payment_method: string; upi_reference_number: string; mr_number: string; period: string; notes: string;
@@ -60,6 +61,7 @@ export default function ManageFees() {
   const [busy, setBusy] = useState(false);
   const [testNumber, setTestNumber] = useState("");
   const [testSending, setTestSending] = useState(false);
+  const [receiptSending, setReceiptSending] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [receiptForPrint, setReceiptForPrint] = useState<FeeReceipt | null>(null);
   const [receiptForView, setReceiptForView] = useState<FeeReceipt | null>(null);
@@ -87,6 +89,25 @@ export default function ManageFees() {
       toast({ title: "WhatsApp test failed", description: error instanceof Error ? error.message : "Could not connect to Meta.", variant: "destructive" });
     } finally {
       setTestSending(false);
+    }
+  };
+
+  const receiptRecipient = receiptPhone(students.find(student => student.id === receiptForView?.student_id)?.phone);
+  const sendWhatsAppReceipt = async () => {
+    if (!receiptForView?.id || !receiptRecipient || receiptSending) return;
+    if (!window.confirm(`Send receipt ${receiptForView.receipt_no} to +${receiptRecipient}? Press OK only if the student agreed to receive receipts on WhatsApp.`)) return;
+    setReceiptSending(true);
+    try {
+      await readJson(await fetch("/api/whatsapp/receipt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: receiptForView.id, to: receiptRecipient, consent: true }),
+      }));
+      toast({ title: "Receipt accepted by WhatsApp", description: "Delivery has not yet been confirmed." });
+    } catch (error) {
+      toast({ title: "Could not send WhatsApp receipt", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    } finally {
+      setReceiptSending(false);
     }
   };
 
@@ -276,7 +297,7 @@ export default function ManageFees() {
     }
   };
 
-  const receiptFromPayment = (payment: FeePayment): FeeReceipt => ({ receipt_no: payment.receipt_no, student_name: payment.student_name, enrollment_no: payment.enrollment_no || "", fee_category: payment.fee_category, amount: payment.amount, payment_date: payment.payment_date, payment_method: payment.payment_method, upi_reference_number: payment.upi_reference_number || "", mr_number: payment.mr_number || "", period: payment.period || "", notes: payment.notes || "" });
+  const receiptFromPayment = (payment: FeePayment): FeeReceipt => ({ id: payment.id, student_id: payment.student_id, receipt_no: payment.receipt_no, student_name: payment.student_name, enrollment_no: payment.enrollment_no || "", fee_category: payment.fee_category, amount: payment.amount, payment_date: payment.payment_date, payment_method: payment.payment_method, upi_reference_number: payment.upi_reference_number || "", mr_number: payment.mr_number || "", period: payment.period || "", notes: payment.notes || "" });
 
   const deletePayment = async (payment: FeePayment) => {
     if (!window.confirm(`Delete receipt ${payment.receipt_no} for ${payment.student_name}?`)) return;
@@ -372,7 +393,8 @@ export default function ManageFees() {
         <section role="dialog" aria-modal="true" aria-labelledby="receipt-view-title" className="w-full max-w-xl rounded-xl border border-white/20 bg-slate-900 p-6 text-white shadow-2xl">
           <div className="mb-5 flex items-start justify-between gap-4"><div><h2 id="receipt-view-title" className="text-xl font-bold">Fee Receipt</h2><p className="text-sm text-gray-300">{receiptForView.receipt_no}</p></div><Button type="button" variant="outline" size="icon" aria-label="Close receipt" onClick={() => setReceiptForView(null)}><X className="h-4 w-4" /></Button></div>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm"><dt className="text-gray-300">Student</dt><dd>{receiptForView.student_name}</dd><dt className="text-gray-300">Enrollment No.</dt><dd>{receiptForView.enrollment_no || "—"}</dd><dt className="text-gray-300">Date</dt><dd>{formatIndianDate(receiptForView.payment_date)}</dd><dt className="text-gray-300">Fee Type</dt><dd>{receiptForView.fee_category}</dd><dt className="text-gray-300">MR No.</dt><dd>{receiptForView.mr_number || "—"}</dd><dt className="text-gray-300">Payment Method</dt><dd>{receiptForView.payment_method}</dd>{receiptForView.payment_method === "UPI" && <><dt className="text-gray-300">UPI Reference No.</dt><dd>{receiptForView.upi_reference_number || "—"}</dd></>}<dt className="text-gray-300">Period</dt><dd>{receiptForView.period || "—"}</dd><dt className="text-gray-300">Amount</dt><dd className="font-semibold">{currency(receiptForView.amount)}</dd><dt className="text-gray-300">Notes</dt><dd>{receiptForView.notes || "—"}</dd></dl>
-          <div className="mt-6 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setReceiptForView(null)}>Close</Button><Button type="button" onClick={() => { setReceiptForPrint(receiptForView); setReceiptForView(null); }}><Printer className="mr-2 h-4 w-4" />Print Receipt</Button></div>
+          <p className="mt-4 text-sm text-gray-300">{receiptRecipient ? "WhatsApp recipient: +" + receiptRecipient : "Add a valid phone number to the student record to send this receipt."}</p>
+          <div className="mt-4 flex flex-wrap justify-end gap-2"><Button type="button" disabled={!receiptRecipient || receiptSending} onClick={() => void sendWhatsAppReceipt()}>{receiptSending ? "Sending…" : "Send on WhatsApp"}</Button><Button type="button" variant="outline" onClick={() => setReceiptForView(null)}>Close</Button><Button type="button" onClick={() => { setReceiptForPrint(receiptForView); setReceiptForView(null); }}><Printer className="mr-2 h-4 w-4" />Print Receipt</Button></div>
         </section>
       </div>}
       <div className="absolute inset-0 bg-black/40" />
