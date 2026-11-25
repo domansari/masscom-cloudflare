@@ -1,10 +1,9 @@
-import { certificateArtworkAtHeight, certificateLogoArtworkAtHeight } from "@/lib/certificate-artwork";
+import { certificateArtworkBounds, certificateArtworkUrl, certificateLogoArtworkAtHeight } from "@/lib/certificate-artwork";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
 const captureWidth = 794;
 const a4CaptureHeight = 1123;
-const pageMargin = 0.72; // 0.01 inch in PDF points.
 const footerClearance = 12; // CSS pixels inside the artwork.
 
 export async function createCertificatePDF(certificateElement: HTMLElement) {
@@ -15,7 +14,7 @@ export async function createCertificatePDF(certificateElement: HTMLElement) {
   Object.assign(container.style, {
     position: "fixed", left: "-10000px", top: "0",
     width: `${captureWidth}px`, height: `${a4CaptureHeight}px`,
-    overflow: "hidden", backgroundColor: "white",
+    overflow: "hidden",
   });
 
   const copy = certificate.cloneNode(true) as HTMLElement;
@@ -36,7 +35,9 @@ export async function createCertificatePDF(certificateElement: HTMLElement) {
   container.appendChild(copy);
   document.body.appendChild(container);
   try {
-    await document.fonts.ready;
+    const artwork = new Image();
+    artwork.src = certificateArtworkUrl;
+    await Promise.all([document.fonts.ready, artwork.decode()]);
     for (const heading of copy.querySelectorAll<HTMLElement>("h2, h4")) {
       // Keep long student and course names within the template's title rows.
       heading.style.whiteSpace = "nowrap";
@@ -52,20 +53,30 @@ export async function createCertificatePDF(certificateElement: HTMLElement) {
     }
     // The footer can extend below the nominal A4 layout when certificate fields wrap.
     const captureHeight = Math.max(a4CaptureHeight, copy.scrollHeight + footerClearance);
-    Object.assign(container.style, {
-      height: `${captureHeight}px`,
-      ...certificateArtworkAtHeight(captureHeight),
-    });
+    container.style.height = `${captureHeight}px`;
     const logo = copy.querySelector<HTMLElement>("[data-certificate-logo-artwork]");
     if (logo) {
       const { top, height, ...background } = certificateLogoArtworkAtHeight(captureHeight);
       Object.assign(logo.style, background, { top: `${top}px`, height: `${height}px` });
     }
     const canvas = await html2canvas(container, {
-      scale: 3, useCORS: true, backgroundColor: "#ffffff",
+      scale: 3, useCORS: true, backgroundColor: null,
       width: captureWidth, height: captureHeight, logging: false, imageTimeout: 15000,
     });
     if (!canvas.width || !canvas.height) throw new Error("Certificate capture is empty");
+
+    // Draw the artwork behind the transparent capture at its full measured height.
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Unable to draw the certificate artwork");
+    const bounds = certificateArtworkBounds(captureHeight);
+    const scaleX = canvas.width / captureWidth;
+    const scaleY = canvas.height / captureHeight;
+    context.save();
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.globalCompositeOperation = "destination-over";
+    context.drawImage(artwork, bounds.left * scaleX, bounds.top * scaleY,
+      bounds.width * scaleX, bounds.height * scaleY);
+    context.restore();
 
     // Let the browser encode the capture without a base64 round trip or PNG recompression.
     const image = await new Promise<Blob>((resolve, reject) => {
@@ -77,8 +88,7 @@ export async function createCertificatePDF(certificateElement: HTMLElement) {
     const imageBytes = new Uint8Array(await image.arrayBuffer());
     const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4", compress: true });
     const { width, height } = pdf.internal.pageSize;
-    pdf.addImage(imageBytes, "JPEG", pageMargin, pageMargin,
-      width - 2 * pageMargin, height - 2 * pageMargin);
+    pdf.addImage(imageBytes, "JPEG", 0, 0, width, height);
     return pdf;
   } finally {
     container.remove();
