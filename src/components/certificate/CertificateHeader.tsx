@@ -9,7 +9,7 @@ interface CertificateHeaderProps {
 const CertificateHeader = ({ data }: CertificateHeaderProps) => {
   return (
     <>
-      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0" style={certificateLogoArtwork} />
+      <div data-certificate-logo-artwork aria-hidden="true" className="pointer-events-none absolute inset-x-0" style={certificateLogoArtwork} />
       {data.photoUrl && (
         <div
           role="img"

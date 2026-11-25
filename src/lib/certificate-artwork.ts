@@ -6,12 +6,17 @@ const height = 1123 * 1920 / 1891;
 const left = (794 - width) * 9 / 13;
 const top = (1123 - height) * 23 / 29;
 
-export const certificateArtwork = {
-  backgroundImage: artwork,
-  backgroundSize: `${width}px ${height}px`,
-  backgroundPosition: `${left}px ${top}px`,
-  backgroundRepeat: "no-repeat",
-};
+export function certificateArtworkAtHeight(pageHeight = 1123) {
+  const scale = pageHeight / 1123;
+  return {
+    backgroundImage: artwork,
+    backgroundSize: `${width}px ${height * scale}px`,
+    backgroundPosition: `${left}px ${top * scale}px`,
+    backgroundRepeat: "no-repeat",
+  };
+}
+
+export const certificateArtwork = certificateArtworkAtHeight();
 
 const logoOffset = 8;
 const instituteHeadingTop = 157;
@@ -19,11 +24,16 @@ const logoAreaScale = (instituteHeadingTop - logoOffset) / instituteHeadingTop;
 
 // Reposition the logo embedded in the artwork while meeting the original
 // background at the institute heading.
-export const certificateLogoArtwork = {
-  top: logoOffset,
-  height: instituteHeadingTop - logoOffset,
-  backgroundImage: artwork,
-  backgroundSize: `${width}px ${height * logoAreaScale}px`,
-  backgroundPosition: `${left}px ${top * logoAreaScale}px`,
-  backgroundRepeat: "no-repeat",
-};
+export function certificateLogoArtworkAtHeight(pageHeight = 1123) {
+  const scale = pageHeight / 1123;
+  return {
+    top: logoOffset * scale,
+    height: (instituteHeadingTop - logoOffset) * scale,
+    backgroundImage: artwork,
+    backgroundSize: `${width}px ${height * logoAreaScale * scale}px`,
+    backgroundPosition: `${left}px ${top * logoAreaScale * scale}px`,
+    backgroundRepeat: "no-repeat",
+  };
+}
+
+export const certificateLogoArtwork = certificateLogoArtworkAtHeight();

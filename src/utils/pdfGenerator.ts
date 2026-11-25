@@ -1,4 +1,4 @@
-import { certificateArtwork } from "@/lib/certificate-artwork";
+import { certificateArtworkAtHeight, certificateLogoArtworkAtHeight } from "@/lib/certificate-artwork";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
@@ -16,7 +16,6 @@ export async function createCertificatePDF(certificateElement: HTMLElement) {
     position: "fixed", left: "-10000px", top: "0",
     width: `${captureWidth}px`, height: `${a4CaptureHeight}px`,
     overflow: "hidden", backgroundColor: "white",
-    ...certificateArtwork,
   });
 
   const copy = certificate.cloneNode(true) as HTMLElement;
@@ -53,7 +52,15 @@ export async function createCertificatePDF(certificateElement: HTMLElement) {
     }
     // The footer can extend below the nominal A4 layout when certificate fields wrap.
     const captureHeight = Math.max(a4CaptureHeight, copy.scrollHeight + footerClearance);
-    container.style.height = `${captureHeight}px`;
+    Object.assign(container.style, {
+      height: `${captureHeight}px`,
+      ...certificateArtworkAtHeight(captureHeight),
+    });
+    const logo = copy.querySelector<HTMLElement>("[data-certificate-logo-artwork]");
+    if (logo) {
+      const { top, height, ...background } = certificateLogoArtworkAtHeight(captureHeight);
+      Object.assign(logo.style, background, { top: `${top}px`, height: `${height}px` });
+    }
     const canvas = await html2canvas(container, {
       scale: 3, useCORS: true, backgroundColor: "#ffffff",
       width: captureWidth, height: captureHeight, logging: false, imageTimeout: 15000,
