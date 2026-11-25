@@ -18,9 +18,6 @@ const CertificateHeader = ({ data }: CertificateHeaderProps) => {
           style={{ backgroundImage: `url("${data.photoUrl}")` }}
         />
       )}
-      <div className="absolute inset-x-0 top-0 z-10 text-center text-sm font-bold leading-4 text-black">
-        Certificate ID: {data.certificateId || "Generated ID"}
-      </div>
 
       {/* Logo and Institute Name - Reduced Gap */}
      <div className="text-center mb-5">
