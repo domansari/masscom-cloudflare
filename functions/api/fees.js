@@ -28,10 +28,90 @@ function normalize(data) {
   return { fee_category: category, payment_method: method, upi_reference_number: method === "UPI" ? upiReference : null, mr_number: mrNumber || null, amount, payment_date: date, period: period || null, notes: notes || null };
 }
 
+
+const mappingSnapshot = `SELECT json_array(
+  (SELECT json_group_array(json(row_data)) FROM (
+    SELECT json_array(id, fee_plan_item_id, fee_category, amount, period) AS row_data
+    FROM fee_payments WHERE student_id = ?1 ORDER BY id
+  )),
+  (SELECT json_group_array(json(row_data)) FROM (
+    SELECT json_array(a.id, a.payment_id, a.fee_plan_item_id, a.amount) AS row_data
+    FROM student_fee_payment_allocations a JOIN fee_payments p ON p.id = a.payment_id
+    WHERE p.student_id = ?1 ORDER BY a.id
+  )),
+  (SELECT json_group_array(json(row_data)) FROM (
+    SELECT json_array(id, fee_category, amount, period, due_date, is_waived, is_active) AS row_data
+    FROM student_fee_plan_items WHERE student_id = ?1 ORDER BY id
+  ))
+) AS snapshot`;
+
+async function changeFeeMonth(env, id, data) {
+  const fromId = data?.from_item_id;
+  const toId = data?.to_item_id;
+  if (typeof fromId !== "string" || typeof toId !== "string" ||
+      !fromId || !toId || fromId === toId || fromId.length > 256 || toId.length > 256) {
+    return json({ error: "Select two different fee months." }, 400);
+  }
+  const payment = await env.DB.prepare("SELECT id, student_id FROM fee_payments WHERE id = ?").bind(id).first();
+  if (!payment) return json({ error: "Fee record not found." }, 404);
+  const student = await env.DB.prepare("SELECT * FROM students WHERE id = ?").bind(payment.student_id).first();
+  if (!student) return json({ error: "Student not found." }, 404);
+
+  const snapshot = await env.DB.prepare(mappingSnapshot).bind(student.id).first();
+  const plan = await getStudentFeePlan(env, student, { ensure: false });
+  const months = plan.items.filter(item => item.fee_category === "Monthly Fee");
+  const from = months.find(item => item.id === fromId);
+  const to = months.find(item => item.id === toId);
+  const receipt = from?.receipts.find(entry => entry.id === id);
+  if (!receipt || !to || to.is_waived || to.receipts.some(entry => entry.id === id) ||
+      receipt.amount > to.remaining_amount + 0.001) {
+    return json({ error: "Select a month with enough unpaid balance that this receipt does not already cover." }, 409);
+  }
+
+  const allocations = await env.DB.prepare(
+    "SELECT id, fee_plan_item_id FROM student_fee_payment_allocations WHERE payment_id = ?"
+  ).bind(id).all();
+  const snapshotValue = snapshot.snapshot;
+  const stale = () => json({ error: "The fee plan changed. Reopen the receipt and try again." }, 409);
+  if (!allocations.results.length) {
+    const result = await env.DB.prepare(
+      `UPDATE fee_payments SET fee_plan_item_id = ?2, period = ?3,
+        notes = CASE WHEN notes LIKE 'Monthly fee for: %' THEN 'Monthly fee for: ' || ?3 ELSE notes END,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?4 AND (${mappingSnapshot}) = ?5`
+    ).bind(student.id, to.id, to.period, id, snapshotValue).run();
+    return result.meta.changes ? json({ success: true }) : stale();
+  }
+
+  const allocation = allocations.results.find(entry => entry.fee_plan_item_id === fromId);
+  if (!allocation) return stale();
+  const [moved] = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE student_fee_payment_allocations SET fee_plan_item_id = ?2
+       WHERE id = ?3 AND (${mappingSnapshot}) = ?4`
+    ).bind(student.id, to.id, allocation.id, snapshotValue),
+    env.DB.prepare(
+      `WITH installments AS (
+         SELECT i.period, i.description FROM student_fee_payment_allocations a
+         JOIN student_fee_plan_items i ON i.id = a.fee_plan_item_id
+         WHERE a.payment_id = ?1 ORDER BY i.due_date, i.id
+       )
+       UPDATE fee_payments SET
+         period = (SELECT CASE WHEN COUNT(*) = 1 THEN MAX(period) ELSE 'Multiple installments' END FROM installments),
+         notes = CASE WHEN notes LIKE 'Monthly fee for: %' OR notes LIKE 'Plan installments: %'
+           THEN (SELECT substr('Plan installments: ' || group_concat(COALESCE(NULLIF(period, ''), description), ', '), 1, 500) FROM installments)
+           ELSE notes END,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?1 AND changes() = 1`
+    ).bind(id),
+  ]);
+  return moved.meta.changes ? json({ success: true }) : stale();
+}
+
 export async function onRequest({ request, env }) {
   try {
     const method = request.method;
-    if (!["GET", "POST", "PUT", "DELETE"].includes(method)) return json({ error: "Method not allowed" }, 405);
+    if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(method)) return json({ error: "Method not allowed" }, 405);
     if (method !== "GET" && !sameOrigin(request)) return json({ error: "Forbidden" }, 403);
     const account = await requireAdmin(request, env);
     if (account.error) return json({ error: account.error }, account.status);
@@ -56,6 +136,7 @@ export async function onRequest({ request, env }) {
     const raw = await request.text();
     if (raw.length > 4096) return json({ error: "Request too large" }, 413);
     const data = JSON.parse(raw);
+    if (method === "PATCH") return await changeFeeMonth(env, id, data);
     const payment = normalize(data);
     if (!payment) return json({ error: "Enter a valid amount, date, fee type, and payment method." }, 400);
 

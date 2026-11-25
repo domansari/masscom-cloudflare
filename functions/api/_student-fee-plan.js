@@ -85,7 +85,7 @@ function monthKey(value) {
   if (match) return match[1] + "-" + match[2].padStart(2, "0");
   match = text.match(/^(\d{1,2})[/-](\d{4})$/);
   if (match) return match[2] + "-" + match[1].padStart(2, "0");
-  const parsed = Date.parse(text);
+  const parsed = Date.parse(/^[a-z]+\s+\d{4}$/i.test(text) ? text + " UTC" : text);
   return Number.isFinite(parsed) ? new Date(parsed).toISOString().slice(0, 7) : "";
 }
 
