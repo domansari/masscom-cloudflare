@@ -12,7 +12,9 @@ function phoneNumber(value) {
 }
 
 const roster = `
-  SELECT s.id, s.student_name, s.roll_no, s.batch_code, s.phone,
+  SELECT s.id, s.student_name, s.roll_no,
+         COALESCE(NULLIF(TRIM(s.section_batch), ''), NULLIF(TRIM(s.batch_code), '')) AS batch_code,
+         s.phone,
          c.phone AS consent_phone, c.granted_at
   FROM students s LEFT JOIN student_notice_consent c ON c.student_id = s.id
   WHERE s.is_active = 1
