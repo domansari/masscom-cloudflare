@@ -14,8 +14,7 @@ import { courseDurationMonths } from "@/lib/course-duration";
 import { formatIndianDate, formatSessionYear } from "@/lib/date-format";
 import StudentPreview from "./StudentPreview";
 import StudentIdCard, { type StudentIdCardRecord } from "@/components/StudentIdCard";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
+import { createStudentIdCardPdf } from "@/lib/student-id-card-pdf";
 
 type Student = {
   id: string; student_name: string; first_name: string | null; last_name: string | null;
@@ -359,25 +358,29 @@ export default function ManageStudents() {
     } finally { setCardDeleting(false); }
   };
 
-  const createIdCardPdf = async () => {
+  const createIdCardPdf = async (card: StudentIdCardRecord) => {
     if (!idCardPreviewRef.current) throw new Error("Select an ID card first.");
-    const canvas = await html2canvas(idCardPreviewRef.current, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
-    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [54, 86] });
-    pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 54, 86);
-    return pdf;
+    return createStudentIdCardPdf(card, idCardPreviewRef.current);
   };
 
   const printIdCard = async () => {
     if (!selectedIdCard || !selectedIdCard.student_active || idCardBusy) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast({ title: "Allow pop-ups to print the ID card." });
+      return;
+    }
     setIdCardBusy(true);
     try {
-      const pdf = await createIdCardPdf();
+      const pdf = await createIdCardPdf(selectedIdCard);
       pdf.autoPrint();
       const url = URL.createObjectURL(pdf.output("blob"));
-      const printWindow = window.open(url, "_blank");
-      if (!printWindow) toast({ title: "Allow pop-ups to print the ID card." });
+      printWindow.location.replace(url);
       window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
-    } catch (cause) { toast({ title: "Could not prepare ID card", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" }); }
+    } catch (cause) {
+      printWindow.close();
+      toast({ title: "Could not prepare ID card", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" });
+    }
     finally { setIdCardBusy(false); }
   };
 
@@ -385,7 +388,7 @@ export default function ManageStudents() {
     if (!selectedIdCard || !selectedIdCard.student_active || idCardBusy) return;
     setIdCardBusy(true);
     try {
-      const pdf = await createIdCardPdf();
+      const pdf = await createIdCardPdf(selectedIdCard);
       pdf.save("Masscom-ID-" + selectedIdCard.registration_no.replace(/[^a-z0-9_-]/gi, "-") + ".pdf");
     } catch (cause) { toast({ title: "Could not download ID card", description: cause instanceof Error ? cause.message : "Please try again.", variant: "destructive" }); }
     finally { setIdCardBusy(false); }
@@ -572,7 +575,6 @@ export default function ManageStudents() {
         <div ref={idCardPreviewRef} className="mx-auto w-full max-w-[360px]">{selectedIdCard ? <StudentIdCard card={selectedIdCard} photoUrl={"/api/students/files?student_id=" + encodeURIComponent(selectedIdCard.student_id) + "&type=photo&preview=1"} /> : <div className="flex aspect-[1.586] w-full items-center justify-center rounded-2xl border border-dashed border-white/30 bg-white/5 text-gray-300">Select an ID card to preview</div>}</div>
         {selectedIdCard && <div className="mx-auto flex max-w-[360px] flex-wrap items-center justify-between gap-3 rounded-lg border border-white/20 bg-white/5 p-3">
           <div className="text-sm text-white"><span className="font-semibold">Enrollment No.:</span> {selectedIdCard.registration_no}<span className={selectedIdCard.student_active ? "ml-3 text-emerald-300" : "ml-3 text-amber-200"}>{selectedIdCard.student_active ? "Active" : "Archived"}</span></div>
-          <div className="flex gap-2"><Button type="button" size="sm" variant="destructive" onClick={() => { setCardToDelete(selectedIdCard); setCardDeletePassword(""); setCardDeleteError(""); }}>Delete</Button></div>
         </div>}
         
       </CardContent></Card>
