@@ -25,15 +25,16 @@ const instituteHeadingTop = 157;
 const logoAreaScale = (instituteHeadingTop - logoOffset) / instituteHeadingTop;
 
 // Reposition the logo embedded in the artwork while meeting the original
-// background at the institute heading.
+// background at the institute heading. Cover the top edge so the unshifted
+// logo cannot show through above the shifted one.
 export function certificateLogoArtworkAtHeight(pageHeight = 1123) {
   const scale = pageHeight / 1123;
   return {
-    top: logoOffset * scale,
-    height: (instituteHeadingTop - logoOffset) * scale,
+    top: 0,
+    height: instituteHeadingTop * scale,
     backgroundImage: artwork,
     backgroundSize: `${width}px ${height * logoAreaScale * scale}px`,
-    backgroundPosition: `${left}px ${top * logoAreaScale * scale}px`,
+    backgroundPosition: `${left}px ${(logoOffset + top * logoAreaScale) * scale}px`,
     backgroundRepeat: "no-repeat",
   };
 }
