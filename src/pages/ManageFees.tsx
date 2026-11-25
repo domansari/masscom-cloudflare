@@ -83,7 +83,14 @@ export default function ManageFees() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ to: testNumber }),
       });
-      await readJson(response);
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        const detail = typeof result?.error === "string" && result.error;
+        throw new Error(detail || `WhatsApp test endpoint returned HTTP ${response.status}.`);
+      }
+      if (result?.success !== true) {
+        throw new Error("The WhatsApp test endpoint did not confirm acceptance.");
+      }
       toast({ title: "Test accepted by Meta", description: "Check WhatsApp for the hello_world message." });
     } catch (error) {
       toast({ title: "WhatsApp test failed", description: error instanceof Error ? error.message : "Could not connect to Meta.", variant: "destructive" });
