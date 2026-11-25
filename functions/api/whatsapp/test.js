@@ -36,18 +36,18 @@ export async function onRequestPost({ request, env }) {
     const result = await response.json().catch(() => null);
     if (response.ok && result?.messages?.[0]?.id) return json({ success: true });
     const code = result?.error?.code;
+    const detail = Number.isInteger(code) ? ` (Meta code ${code})` : "";
     if (code === 190 || response.status === 401) {
-      return json({ error: "Generate a fresh Meta access token and update the Cloudflare secret." }, 502);
+      return json({ error: `Check the Meta access token in Cloudflare${detail}.` }, 424);
     }
     if (code === 131030) {
       return json({ error: "Add and verify this recipient under Step 1. Try it out in Meta." }, 400);
     }
     if (code === 132001) {
-      return json({ error: "Meta could not find the hello_world template. Check that the Phone Number ID belongs to the Meta test sender." }, 502);
+      return json({ error: `The selected WhatsApp account does not have the hello_world template in en_US${detail}.` }, 422);
     }
-    const detail = Number.isInteger(code) ? ` (code ${code})` : "";
-    return json({ error: `Meta did not accept the test message${detail}.` }, 502);
+    return json({ error: `Meta did not accept the test message${detail}.` }, 424);
   } catch {
-    return json({ error: "Meta did not return a response. Check WhatsApp before retrying." }, 502);
+    return json({ error: "Meta did not return a response. Check WhatsApp before retrying." }, 424);
   }
 }
