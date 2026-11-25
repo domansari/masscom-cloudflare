@@ -21,6 +21,9 @@ export async function onRequestPost({ request, env }) {
     return json({ error: "Check the WhatsApp Phone Number ID and access token in Cloudflare." }, 503);
   }
 
+  const templateName = env.WHATSAPP_TEST_TEMPLATE_NAME?.trim() || "hello_world";
+  const templateLanguage = env.WHATSAPP_TEST_TEMPLATE_LANGUAGE?.trim() || "en_US";
+
   try {
     const response = await fetch(`https://graph.facebook.com/v27.0/${phoneId}/messages`, {
       method: "POST",
@@ -29,7 +32,7 @@ export async function onRequestPost({ request, env }) {
         messaging_product: "whatsapp",
         to,
         type: "template",
-        template: { name: "hello_world", language: { code: "en_US" } },
+        template: { name: templateName, language: { code: templateLanguage } },
       }),
       signal: AbortSignal.timeout(12000),
     });
@@ -43,8 +46,11 @@ export async function onRequestPost({ request, env }) {
     if (code === 131030) {
       return json({ error: "Add and verify this recipient under Step 1. Try it out in Meta." }, 400);
     }
+    if (code === 131058) {
+      return json({ error: `Meta allows the sample template only from its test number. Configure an approved template in Cloudflare${detail}.` }, 422);
+    }
     if (code === 132001) {
-      return json({ error: `The selected WhatsApp account does not have the hello_world template in en_US${detail}.` }, 422);
+      return json({ error: `The selected WhatsApp account does not have the ${templateName} template in ${templateLanguage}${detail}.` }, 422);
     }
     return json({ error: `Meta did not accept the test message${detail}.` }, 424);
   } catch {
