@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarClock, RefreshCw } from "lucide-react";
-import { FeeReminderButton } from "@/components/FeeReminderButton";
+import FeeReminderButton from "@/components/FeeReminderButton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
