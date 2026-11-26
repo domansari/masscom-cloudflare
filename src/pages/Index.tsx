@@ -1,8 +1,109 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Fragment, useEffect, useState } from "react";
-import { Clock, Database, FileText, IndianRupee, MessageCircle, Shield, Users, type LucideIcon } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { Clock, Database, FileText, IndianRupee, MessageCircle, RefreshCw, Shield, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+
+type FeeDashboardSummary = {
+  today_collection: number;
+  today_receipts: number;
+  month_collection: number;
+  month_receipts: number;
+  overdue_amount: number;
+  overdue_students: number;
+  upcoming_amount: number;
+  upcoming_students: number;
+};
+
+const currency = (amount: number) => new Intl.NumberFormat("en-IN", {
+  style: "currency", currency: "INR", maximumFractionDigits: 2,
+}).format(amount);
+
+function FeeDashboardOverview() {
+  const [summary, setSummary] = useState<FeeDashboardSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadSummary = useCallback(async (refresh = false) => {
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/fees/summary?include_items=0", { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "फीस का सारांश लोड नहीं हो पाया।");
+      setSummary(result.data);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "फीस का सारांश लोड नहीं हो पाया।");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadSummary(); }, [loadSummary]);
+
+  const overdue = Number(summary?.overdue_amount || 0);
+  const upcoming = Number(summary?.upcoming_amount || 0);
+  const totalDue = overdue + upcoming;
+  const overduePercent = totalDue > 0 ? Math.round((overdue / totalDue) * 100) : 0;
+  const pieStyle = totalDue > 0
+    ? { background: `conic-gradient(from -90deg, #f43f5e 0% ${overduePercent}% , #f59e0b ${overduePercent}% 100%)` }
+    : { background: "conic-gradient(#64748b 0 100%)" };
+
+  const metrics = summary ? [
+    { label: "आज की वसूली", amount: summary.today_collection, detail: `${summary.today_receipts} रसीदें`, color: "text-emerald-200", border: "border-emerald-300/20" },
+    { label: "इस महीने की वसूली", amount: summary.month_collection, detail: `${summary.month_receipts} रसीदें`, color: "text-cyan-200", border: "border-cyan-300/20" },
+    { label: "कुल बकाया", amount: summary.overdue_amount, detail: `${summary.overdue_students} छात्र`, color: "text-rose-200", border: "border-rose-300/20" },
+    { label: "अगले 7 दिनों में देय", amount: summary.upcoming_amount, detail: `${summary.upcoming_students} छात्र`, color: "text-amber-200", border: "border-amber-300/20" },
+  ] : [];
+
+  return (
+    <section className="mx-auto mb-8 max-w-6xl rounded-2xl border border-white/20 bg-slate-950/55 p-4 shadow-xl backdrop-blur-lg sm:p-6" aria-labelledby="fee-overview-title">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 id="fee-overview-title" className="text-xl font-semibold text-white">फीस का आज का सारांश</h2>
+          <p className="mt-1 text-sm text-gray-300">वसूली और देय फीस का सार</p>
+        </div>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => void loadSummary(true)} disabled={loading || refreshing}
+            className="inline-flex items-center gap-2 rounded-md border border-white/25 px-3 py-2 text-sm text-white hover:bg-white/10 disabled:opacity-60">
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" /> ताज़ा करें
+          </button>
+          <Link to="/fees" className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-600">फीस लें</Link>
+        </div>
+      </div>
+      {error && <div role="alert" className="mb-4 rounded-lg border border-rose-300/30 bg-rose-950/40 p-3 text-sm text-rose-100">{error}</div>}
+      {loading && !summary ? <p className="py-8 text-center text-sm text-gray-300">फीस का सारांश लोड हो रहा है…</p> : summary && (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(250px,1fr)]">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {metrics.map(metric => <div key={metric.label} className={`rounded-xl border ${metric.border} bg-white/5 p-4`}>
+              <p className="text-sm text-gray-300">{metric.label}</p>
+              <p className={`mt-2 text-2xl font-bold tabular-nums ${metric.color}`}>{currency(metric.amount)}</p>
+              <p className="mt-1 text-xs text-gray-400">{metric.detail}</p>
+            </div>)}
+          </div>
+          <div className="flex flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 p-4">
+            <h3 className="mb-3 text-sm font-semibold text-white">देय फीस का विभाजन</h3>
+            <div className="relative h-40 w-40 rounded-full" style={pieStyle} role="img"
+              aria-label={`कुल देय ${currency(totalDue)}: बकाया ${currency(overdue)}, अगले 7 दिन में ${currency(upcoming)}`}>
+              <div className="absolute inset-[28%] flex flex-col items-center justify-center rounded-full bg-slate-950 text-center">
+                <span className="text-[10px] text-gray-300">कुल देय</span>
+                <span className="text-sm font-bold text-white">{currency(totalDue)}</span>
+              </div>
+            </div>
+            <div className="mt-4 grid w-full gap-2 text-xs sm:grid-cols-2 xl:grid-cols-1">
+              <p className="flex items-center gap-2 text-rose-100"><span className="h-3 w-3 rounded-sm bg-rose-500" />बकाया {currency(overdue)}</p>
+              <p className="flex items-center gap-2 text-amber-100"><span className="h-3 w-3 rounded-sm bg-amber-500" />अगले 7 दिन {currency(upcoming)}</p>
+            </div>
+            {totalDue === 0 && <p className="mt-2 text-xs text-gray-400">अभी कोई फीस देय नहीं है।</p>}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
 const clockFormat = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
@@ -110,6 +211,7 @@ const Index = () => {
           </div>
           <p className="mt-1 text-sm text-gray-200">Choose a work area to get started.</p>
         </div>
+        {isAdmin() && <FeeDashboardOverview />}
         <div className="mx-auto grid max-w-6xl gap-6 sm:grid-cols-2 xl:grid-cols-3">
           {modules.map(({ title, description, action, to, Icon, iconClass, actionClass }, index) => (
             <Fragment key={to}>
