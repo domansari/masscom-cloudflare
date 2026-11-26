@@ -54,6 +54,7 @@ export async function onRequest({ request, env }) {
   if (account.error) return json({ error: account.error }, account.status);
 
   try {
+    const includeItems = new URL(request.url).searchParams.get("include_items") !== "0";
     const today = todayInIndia();
     const monthStart = today.slice(0, 7) + "-01";
     const nextSevenDays = addDays(today, 7);
@@ -109,10 +110,10 @@ export async function onRequest({ request, env }) {
         month_receipts: Number(collection?.month_receipts || 0),
         overdue_amount: overdueItems.reduce((sum, item) => sum + item.remaining_amount, 0),
         overdue_students: overdueDues.length,
-        overdue_items: overdueDues,
+        overdue_items: includeItems ? overdueDues : [],
         upcoming_amount: upcomingItems.reduce((sum, item) => sum + item.remaining_amount, 0),
         upcoming_students: upcomingDues.length,
-        upcoming_items: upcomingDues,
+        upcoming_items: includeItems ? upcomingDues : [],
       },
     });
   } catch (error) {
