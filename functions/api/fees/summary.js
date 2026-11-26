@@ -109,10 +109,10 @@ export async function onRequest({ request, env }) {
         month_receipts: Number(collection?.month_receipts || 0),
         overdue_amount: overdueItems.reduce((sum, item) => sum + item.remaining_amount, 0),
         overdue_students: overdueDues.length,
-        overdue_items: overdueDues.slice(0, 40),
+        overdue_items: overdueDues,
         upcoming_amount: upcomingItems.reduce((sum, item) => sum + item.remaining_amount, 0),
         upcoming_students: upcomingDues.length,
-        upcoming_items: upcomingDues.slice(0, 20),
+        upcoming_items: upcomingDues,
       },
     });
   } catch (error) {
