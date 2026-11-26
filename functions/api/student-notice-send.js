@@ -43,17 +43,14 @@ export async function onRequestPost({ request, env }) {
 
   try {
     const student = await env.DB.prepare(
-      `SELECT s.id, s.phone, c.phone AS consent_phone
-       FROM students s LEFT JOIN student_notice_consent c ON c.student_id = s.id
+      `SELECT s.id, s.phone
+       FROM students s
        WHERE s.id = ? AND s.is_active = 1 LIMIT 1`
     ).bind(data.student_id).first();
 
     if (!student) return json({ error: "Active student not found." }, 404);
     const to = phoneNumber(student.phone);
     if (!to) return json({ error: "This student does not have a valid phone number." }, 400);
-    if (to !== student.consent_phone) {
-      return json({ error: "WhatsApp notice consent is not recorded for this phone number." }, 403);
-    }
 
     const response = await fetch(`https://graph.facebook.com/v27.0/${phoneId}/messages`, {
       method: "POST",
@@ -92,9 +89,6 @@ export async function onRequestPost({ request, env }) {
       error: `Meta did not accept the notice${Number.isInteger(code) ? ` (code ${code})` : ""}.`,
     }, 424);
   } catch (error) {
-    if (/no such table: student_notice_consent/i.test(String(error?.message))) {
-      return json({ error: "Apply the Student Notices migration to the production D1 database.", fatal: true }, 503);
-    }
     return json({ error: "Meta did not return a response. Check the WhatsApp account before retrying." }, 424);
   }
 }
