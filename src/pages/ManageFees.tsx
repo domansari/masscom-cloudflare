@@ -60,8 +60,6 @@ export default function ManageFees() {
   const [studentSearch, setStudentSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [testNumber, setTestNumber] = useState("");
-  const [testSending, setTestSending] = useState(false);
   const [receiptSending, setReceiptSending] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [receiptForPrint, setReceiptForPrint] = useState<FeeReceipt | null>(null);
@@ -73,32 +71,6 @@ export default function ManageFees() {
   const [feePlanMonths, setFeePlanMonths] = useState<FeePlanMonth[]>([]);
   const [selectedMonthIds, setSelectedMonthIds] = useState<string[]>([]);
   const [deletingId, setDeletingId] = useState("");
-
-  const sendWhatsAppTest = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (testSending) return;
-    setTestSending(true);
-    try {
-      const response = await fetch("/api/whatsapp/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: testNumber }),
-      });
-      const result = await response.json().catch(() => null);
-      if (!response.ok) {
-        const detail = typeof result?.error === "string" && result.error;
-        throw new Error(detail || `WhatsApp test endpoint returned HTTP ${response.status}.`);
-      }
-      if (result?.success !== true) {
-        throw new Error("The WhatsApp test endpoint did not confirm acceptance.");
-      }
-      toast({ title: "Test accepted by Meta", description: "Check the recipient’s WhatsApp for the test message." });
-    } catch (error) {
-      toast({ title: "WhatsApp test failed", description: error instanceof Error ? error.message : "Could not connect to Meta.", variant: "destructive" });
-    } finally {
-      setTestSending(false);
-    }
-  };
 
   const receiptRecipient = receiptPhone(students.find(student => student.id === receiptForView?.student_id)?.phone);
   const sendWhatsAppReceipt = async () => {
@@ -420,16 +392,7 @@ export default function ManageFees() {
               <p className="mt-1 text-sm text-gray-200">Collect and manage student fee payments.</p>
             </div>
           </div>
-          <details className="mt-4 rounded-lg border border-white/20 bg-white/10 p-3 text-white">
-            <summary className="cursor-pointer text-sm font-semibold">WhatsApp API Test</summary>
-            <form onSubmit={sendWhatsAppTest} className="mt-3 space-y-2">
-              <Label htmlFor="whatsapp-test-number">Meta-verified test recipient</Label>
-              <div className="flex flex-wrap items-center gap-2">
-                <Input id="whatsapp-test-number" type="tel" autoComplete="tel" required maxLength={24} placeholder="+91…" value={testNumber} onChange={event => setTestNumber(event.target.value)} className="w-full border-white/30 bg-white/10 text-white placeholder:text-gray-300 sm:w-64" />
-                <Button type="submit" disabled={testSending}>{testSending ? "Sending…" : "Send Test Message"}</Button>
-              </div>
-            </form>
-          </details>
+
         </header>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-lg border border-white/20 bg-black/20 p-1 shadow-sm backdrop-blur-lg">
