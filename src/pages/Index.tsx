@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { AlertCircle, CalendarClock, Clock, Database, FileText, IndianRupee, MessageCircle, RefreshCw, Shield, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { receiptPhone } from "@/lib/receipt-phone.js";
 
 type FeeDue = {
   student_id: string;
@@ -15,6 +16,7 @@ type FeeDue = {
   period: string;
   due_date: string;
   remaining_amount: number;
+  items?: Array<{ fee_category: string; period: string; due_date: string; remaining_amount: number }>;
 };
 
 type FeeSummary = {
@@ -35,14 +37,8 @@ const currency = (amount: number) => new Intl.NumberFormat("en-IN", {
   style: "currency", currency: "INR", maximumFractionDigits: 2,
 }).format(amount);
 
-function whatsappReminder(item: FeeDue) {
-  const digits = item.phone.replace(/\D/g, "").replace(/^0+/, "");
-  const phone = digits.length === 10 ? `91${digits}` : digits;
-  if (phone.length < 10 || phone.length > 15) return null;
-  const guardian = item.father_name ? ` (अभिभावक: ${item.father_name})` : "";
-  const amount = item.remaining_amount.toLocaleString("en-IN", { maximumFractionDigits: 2 });
-  const message = `नमस्ते, Masscom Infotech Education की ओर से ${item.student_name}${guardian} की ${item.period} फीस कुल ₹${amount} बकाया होने की सूचना है। कृपया सुविधा अनुसार जमा करें। अगर फीस पहले ही जमा कर दी है, तो इस संदेश को नज़रअंदाज़ करें। धन्यवाद।`;
-  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+function hasWhatsAppNumber(phone: string) {
+  return Boolean(receiptPhone(phone));
 }
 
 function FeeOverview() {
@@ -50,6 +46,8 @@ function FeeOverview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [sendingStudentId, setSendingStudentId] = useState("");
+  const [reminderStatus, setReminderStatus] = useState<Record<string, { kind: "sending" | "success" | "error"; message: string }>>({});
 
   const loadSummary = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true);
@@ -69,6 +67,37 @@ function FeeOverview() {
   }, []);
 
   useEffect(() => { void loadSummary(); }, [loadSummary]);
+  async function sendFeeReminder(item: FeeDue) {
+    if (sendingStudentId || !hasWhatsAppNumber(item.phone)) return;
+    const installmentCount = item.items?.length || 1;
+    const confirmed = window.confirm(
+      "Send the WhatsApp fee reminder to " + item.student_name + " at +" + receiptPhone(item.phone) + "?\n" +
+      "Overdue: " + item.period + " · Total outstanding: " + currency(item.remaining_amount) + ".\n" +
+      "A separate template message will be sent for each overdue fee period."
+    );
+    if (!confirmed) return;
+
+    setSendingStudentId(item.student_id);
+    setReminderStatus(current => ({ ...current, [item.student_id]: { kind: "sending", message: "Sending through WhatsApp API…" } }));
+    try {
+      const response = await fetch("/api/whatsapp/reminder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_id: item.student_id }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.success !== true) throw new Error(result.error || "Meta did not accept the fee reminder.");
+      const accepted = Number(result.accepted_count || 0);
+      let message = accepted + " of " + installmentCount + " reminder(s) accepted by Meta. Delivery is not confirmed.";
+      if (result.failures?.length) message += " Failed: " + result.failures.map((failure: { period: string; error: string }) => failure.period + " — " + failure.error).join("; ");
+      setReminderStatus(current => ({ ...current, [item.student_id]: { kind: result.failures?.length ? "error" : "success", message } }));
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Could not send the fee reminder.";
+      setReminderStatus(current => ({ ...current, [item.student_id]: { kind: "error", message } }));
+    } finally {
+      setSendingStudentId("");
+    }
+  }
 
   const metrics = summary ? [
     { label: "आज की वसूली", amount: summary.today_collection, detail: `${summary.today_receipts} रसीदें`, color: "text-emerald-200" },
@@ -111,14 +140,17 @@ function FeeOverview() {
             </div>
             {summary.overdue_items.length === 0 ? <p className="text-sm text-gray-300">अभी कोई बकाया फीस नहीं है।</p> : <ul className="space-y-2">
               {summary.overdue_items.slice(0, 8).map((item, index) => {
-                const whatsapp = whatsappReminder(item);
+                const hasPhone = hasWhatsAppNumber(item.phone);
+                const status = reminderStatus[item.student_id];
                 return <li key={`${item.student_id}-${item.due_date}-${item.fee_category}-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-black/20 p-3">
                   <div className="min-w-0">
                     <p className="truncate font-medium text-white">{item.student_name}</p>
                     <p className="text-xs text-gray-300">{item.period} · देय {item.due_date} · {currency(item.remaining_amount)}</p>
+                    {status && <p role="status" className={`mt-1 text-xs ${status.kind === "error" ? "text-rose-200" : status.kind === "success" ? "text-emerald-200" : "text-cyan-200"}`}>{status.message}</p>}
                   </div>
-                  {whatsapp ? <a href={whatsapp} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-green-700/80 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-green-600"><MessageCircle className="h-3.5 w-3.5" aria-hidden="true" /> WhatsApp</a> : <span className="text-xs text-gray-400">फोन नंबर उपलब्ध नहीं</span>}
-                </li>;
+                  {hasPhone ? <button type="button" disabled={Boolean(sendingStudentId)} onClick={() => void sendFeeReminder(item)} className="inline-flex shrink-0 items-center gap-1 rounded-md bg-green-700/80 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60">
+                    <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" /> {sendingStudentId === item.student_id ? "Sending…" : "WhatsApp"}
+                  </button> : <span className="text-xs text-gray-400">फोन नंबर उपलब्ध नहीं</span>}
               })}
             </ul>}
             {summary.overdue_students > 8 && <Link to="/fees" className="mt-3 inline-block text-sm font-medium text-rose-100 underline underline-offset-4">बाकी {summary.overdue_students - 8} छात्र फीस पेज पर देखें</Link>}
