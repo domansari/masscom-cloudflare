@@ -244,7 +244,7 @@ const Index = () => {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h1 className="text-3xl font-bold text-white">Dashboard</h1>
             {isAdmin() && <Link to="/student-notices" className="inline-flex items-center gap-2 rounded-md bg-indigo-700 px-4 py-2 font-medium text-white hover:bg-indigo-600">
-              <MessageCircle className="h-4 w-4" aria-hidden="true" /> Student Notices
+              <MessageCircle className="h-4 w-4" aria-hidden="true" /> Message Students
             </Link>}
           </div>
           <p className="mt-1 text-sm text-gray-200">Choose a work area to get started.</p>
