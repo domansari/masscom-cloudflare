@@ -57,7 +57,7 @@ function Notices() {
   const withoutConsent = recipients.filter(student => student.phone && !student.consent_at).length;
   const vacationReady = Boolean(start && end && resume && start <= end && end < resume);
   const preview = vacationReady && ("Masscom Infotech Education: Your classes will be closed from " + dateLabel(start) + " to " + dateLabel(end) +
-      ". Classes will resume on " + dateLabel(resume) + ". Thank You.");
+      ". Classes will resume on " + dateLabel(resume) + " Thank You.");
 
   async function recordConsent(student: Student) {
     const granted = !student.consent_at;
