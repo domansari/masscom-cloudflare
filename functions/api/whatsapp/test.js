@@ -12,12 +12,12 @@ export async function onRequestPost({ request, env }) {
 
   const data = await request.json().catch(() => null);
   const to = typeof data?.to === "string" ? data.to.replace(/[ +()-]/g, "") : "";
-  if (!/^[1-9]\\d{7,14}$/.test(to)) {
+  if (!/^[1-9]\d{7,14}$/.test(to)) {
     return json({ error: "Enter a WhatsApp number with its country code." }, 400);
   }
   const phoneId = env.WHATSAPP_PHONE_NUMBER_ID?.trim();
   const token = env.WHATSAPP_ACCESS_TOKEN?.trim();
-  if (!phoneId || !/^\\d+$/.test(phoneId) || !token) {
+  if (!phoneId || !/^\d+$/.test(phoneId) || !token) {
     return json({ error: "Check the WhatsApp Phone Number ID and access token in Cloudflare." }, 503);
   }
 
