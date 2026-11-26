@@ -9,7 +9,6 @@ type Student = {
   roll_no: string | null;
   batch_code: string | null;
   phone: string;
-  consent_at: string | null;
 };
 
 const dateLabel = (date: string) => new Intl.DateTimeFormat("en-IN", {
@@ -29,7 +28,6 @@ function Notices() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
   const [selectedBatches, setSelectedBatches] = useState<string[]>([]);
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -51,35 +49,12 @@ function Notices() {
 
   const batches = [...new Set(students.map(student => student.batch_code).filter(Boolean) as string[])].sort();
   const recipients = students.filter(student => !selectedBatches.length || selectedBatches.includes(student.batch_code || ""));
-  const sendable = recipients.filter(student => student.phone && student.consent_at);
+  const sendable = recipients.filter(student => student.phone);
   const uniqueRecipients = [...new Map(sendable.map(student => [student.phone, student])).values()];
   const withoutPhone = recipients.filter(student => !student.phone).length;
-  const withoutConsent = recipients.filter(student => student.phone && !student.consent_at).length;
   const vacationReady = Boolean(start && end && resume && start <= end && end < resume);
   const preview = vacationReady && ("Masscom Infotech Education: Your classes will be closed from " + dateLabel(start) + " to " + dateLabel(end) +
       ". Classes will resume on " + dateLabel(resume) + " Thank You.");
-
-  async function recordConsent(student: Student) {
-    const granted = !student.consent_at;
-    const prompt = granted
-      ? "Confirm the owner of +" + student.phone + " agreed to receive Masscom vacation, class changes and urgent notices on WhatsApp."
-      : "Remove WhatsApp notice consent for " + student.student_name + "?";
-    if (!window.confirm(prompt)) return;
-    setSaving(true);
-    setError("");
-    try {
-      const result = await readResponse(await fetch("/api/student-notices", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: student.id, phone: student.phone, granted }),
-      }));
-      setStudents(current => current.map(row => row.id === student.id ? { ...row, consent_at: result.consent_at } : row));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to update consent.");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function copyNotice() {
     if (!preview) return;
@@ -94,7 +69,7 @@ function Notices() {
   async function sendVacationNotice() {
     if (!vacationReady || !uniqueRecipients.length || sending) return;
     const confirmed = window.confirm(
-      "Send the approved vacation notice to " + uniqueRecipients.length + " unique WhatsApp numbers? Only students with a valid phone and recorded WhatsApp consent will receive it."
+      "Send the approved vacation notice to " + uniqueRecipients.length + " unique WhatsApp numbers? Only active students with a valid phone number will receive it."
     );
     if (!confirmed) return;
 
@@ -143,7 +118,7 @@ function Notices() {
       <header>
         <Link to="/" className="text-sm text-cyan-200 underline">Back to Dashboard</Link>
         <h1 className="mt-2 text-3xl font-bold">Student Notices</h1>
-        <p className="mt-1 text-slate-300">Send the approved masscom_vacation_notice template to eligible student WhatsApp numbers.</p>
+        <p className="mt-1 text-slate-300">Send the approved masscom_vacation_notice template to active students with saved WhatsApp numbers. Duplicate numbers receive one message.</p>
       </header>
       {error && <p role="alert" className="rounded-md bg-rose-950 p-3 text-rose-100">{error}</p>}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -189,26 +164,20 @@ function Notices() {
             </div>
           </fieldset>
           <p className="text-sm text-slate-300">{loading ? "Loading students…" :
-            recipients.length + " active students · " + uniqueRecipients.length + " unique WhatsApp numbers ready · " + withoutConsent + " with a phone but no recorded consent · " + withoutPhone + " without a valid phone"}</p>
+            recipients.length + " active students · " + uniqueRecipients.length + " unique WhatsApp numbers ready · " + withoutPhone + " without a valid phone"}</p>
         </section>
       </div>
       <section className={panel}>
-        <h2 className="text-xl font-semibold">Contact list and consent</h2>
+        <h2 className="text-xl font-semibold">Student contact list</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="text-slate-300"><tr>
-              <th className="p-2">Student</th><th className="p-2">Batch</th><th className="p-2">Contact</th><th className="p-2">WhatsApp consent</th>
+              <th className="p-2">Student</th><th className="p-2">Batch</th><th className="p-2">WhatsApp number</th>
             </tr></thead>
             <tbody>{recipients.map(student => <tr key={student.id} className="border-t border-white/10">
               <td className="p-2">{student.student_name}{student.roll_no && <span className="block text-slate-400">{student.roll_no}</span>}</td>
               <td className="p-2">{student.batch_code || "Unassigned"}</td>
               <td className="p-2">{student.phone ? <a className="text-cyan-200 underline" href={"tel:+" + student.phone}>+{student.phone}</a> : "No valid number"}</td>
-              <td className="p-2">
-                <p className="mb-1">{student.consent_at ? "Recorded " + dateLabel(student.consent_at.slice(0, 10)) : "Contact separately"}</p>
-                {student.phone && <Button size="sm" variant="secondary" disabled={saving} onClick={() => void recordConsent(student)}>
-                  {student.consent_at ? "Revoke consent" : "Record consent"}
-                </Button>}
-              </td>
             </tr>)}</tbody>
           </table>
           {!loading && !recipients.length && <p className="p-2 text-slate-300">No active students found.</p>}
