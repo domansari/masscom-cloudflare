@@ -150,7 +150,7 @@ function FeeOverview() {
                   </div>
                   {hasPhone ? <button type="button" disabled={Boolean(sendingStudentId)} onClick={() => void sendFeeReminder(item)} className="inline-flex shrink-0 items-center gap-1 rounded-md bg-green-700/80 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60">
                     <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" /> {sendingStudentId === item.student_id ? "Sending…" : "WhatsApp"}
-                  </button> : <span className="text-xs text-gray-400">फोन नंबर उपलब्ध नहीं</span>}
+                  </button> : <span className="text-xs text-gray-400">फोन नंबर उपलब्ध नहीं</span>}</li>;
               })}
             </ul>}
             {summary.overdue_students > 8 && <Link to="/fees" className="mt-3 inline-block text-sm font-medium text-rose-100 underline underline-offset-4">बाकी {summary.overdue_students - 8} छात्र फीस पेज पर देखें</Link>}
