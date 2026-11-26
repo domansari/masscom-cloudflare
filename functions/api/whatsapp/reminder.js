@@ -57,11 +57,13 @@ export async function onRequestPost({ request, env }) {
 
     const plan = await getStudentFeePlan(env, student);
     const today = todayInIndia();
-    const overdue = plan.items.filter(item =>
+    const allOverdue = plan.items.filter(item =>
       !item.is_waived && item.remaining_amount > 0.001 && item.due_date <= today
     );
+    const planItemId = typeof data.plan_item_id === "string" ? data.plan_item_id.trim() : "";
+    const overdue = planItemId ? allOverdue.filter(item => item.id === planItemId) : allOverdue;
     if (!overdue.length) {
-      return json({ error: "No unpaid fees are currently due for this student. Refresh the dashboard." }, 409);
+      return json({ error: planItemId ? "This fee installment is no longer due. Refresh the student schedule." : "No unpaid fees are currently due for this student. Refresh the dashboard." }, 409);
     }
 
     const failures = [];
@@ -114,7 +116,7 @@ export async function onRequestPost({ request, env }) {
     if (!accepted) {
       return json({ success: false, error: failures[0]?.error || "Meta did not accept the reminder.", failures }, 424);
     }
-    return json({ success: true, accepted_count: accepted, failures });
+    return json({ success: true, accepted_count: accepted, processed_count: overdue.length, failures });
   } catch (error) {
     const message = String(error?.message || "");
     if (/no such table: student_fee_plan_items/i.test(message)) {
