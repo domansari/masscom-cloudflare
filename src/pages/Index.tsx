@@ -149,7 +149,7 @@ function FeeOverview() {
                     {status && <p role="status" className={`mt-1 text-xs ${status.kind === "error" ? "text-rose-200" : status.kind === "success" ? "text-emerald-200" : "text-cyan-200"}`}>{status.message}</p>}
                   </div>
                   {hasPhone ? <button type="button" disabled={Boolean(sendingStudentId)} onClick={() => void sendFeeReminder(item)} className="inline-flex shrink-0 items-center gap-1 rounded-md bg-green-700/80 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60">
-                    <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" /> {sendingStudentId === item.student_id ? "Sending…" : "WhatsApp"}
+                    <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" /> {sendingStudentId === item.student_id ? "Sending…" : "WhatsApp API"}
                   </button> : <span className="text-xs text-gray-400">फोन नंबर उपलब्ध नहीं</span>}</li>;
               })}
             </ul>}
