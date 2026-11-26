@@ -10,6 +10,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { buildEnrollmentNo } from "../../functions/api/_student-enrollment.js";
 import { receiptPhone } from "@/lib/receipt-phone.js";
 import { formatIndianDate } from "@/lib/date-format";
+import DueListAndReminder from "@/components/DueListAndReminder";
 
 type Student = {
   id: string; student_name: string; roll_no: string | null; batch_code: string | null;
@@ -431,9 +432,10 @@ export default function ManageFees() {
           </details>
         </header>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="h-auto rounded-lg border border-white/20 bg-black/20 p-1 shadow-sm backdrop-blur-lg">
+          <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-lg border border-white/20 bg-black/20 p-1 shadow-sm backdrop-blur-lg">
             <TabsTrigger value="collect" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=inactive]:text-white">Collect</TabsTrigger>
             <TabsTrigger value="manage" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=inactive]:text-white">Manage</TabsTrigger>
+            <TabsTrigger value="reminders" className="whitespace-nowrap data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=inactive]:text-white">Due List &amp; WhatsApp Reminder</TabsTrigger>
           </TabsList>
           <TabsContent value="collect" className="mt-0">
             <Card className="border-white/20 bg-white/10 text-white backdrop-blur-lg">
@@ -570,6 +572,9 @@ export default function ManageFees() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+          <TabsContent value="reminders" className="mt-0">
+            <DueListAndReminder />
           </TabsContent>
         </Tabs>
       </main>
